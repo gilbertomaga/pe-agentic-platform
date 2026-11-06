@@ -4,12 +4,18 @@ The golden path, asserted.
 The test that matters is the one where a team asks for more than the platform allows. A path that
 cannot stop that is a template with good intentions.
 """
+import os
+
 import pytest
 
 from golden_path import new_agent
 from policy import evaluate
 
-needs_opa = pytest.mark.skipif(not evaluate.available(), reason="opa not on PATH")
+# Same rule as the containment tests: locally these may skip, in CI they must run.
+_has_opa = evaluate.available()
+if os.environ.get("REQUIRE_OPA") == "1" and not _has_opa:
+    raise RuntimeError("REQUIRE_OPA=1 but opa is not on PATH")
+needs_opa = pytest.mark.skipif(not _has_opa, reason="opa not on PATH (local machine)")
 
 
 @pytest.fixture
