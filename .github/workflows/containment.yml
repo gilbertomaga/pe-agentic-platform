@@ -1,0 +1,35 @@
+name: Containment
+
+# The containment claim is proven here rather than described. The work machine has
+# virtualization disabled in BIOS, so Docker cannot run locally and the three proof tests
+# skip there. On this runner they must run: REQUIRE_DOCKER=1 turns a missing daemon into a
+# failure, so a green build means the sandbox was actually exercised.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  containment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pytest
+        run: python -m pip install --quiet pytest
+
+      - name: Confirm a Docker daemon is reachable
+        run: docker info --format '{{.ServerVersion}}'
+
+      - name: Pull the sandbox image
+        run: docker pull --quiet python:3.12-slim
+
+      - name: Run the suite, with the containment tests required
+        env:
+          REQUIRE_DOCKER: "1"
+        run: python -m pytest -q -rs

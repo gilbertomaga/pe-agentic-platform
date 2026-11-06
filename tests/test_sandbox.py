@@ -4,6 +4,7 @@ The isolation model, asserted.
 These tests exist so the containment claim is checkable rather than described. The first group
 needs no Docker: the flags are what the isolation is, so they are tested as data.
 """
+import os
 from pathlib import Path
 
 import pytest
@@ -58,7 +59,13 @@ def test_the_workspace_is_read_only_unless_asked(tmp_path):
 
 
 # --------------------------------------------------------------- needs Docker
-needs_docker = pytest.mark.skipif(not sandbox.available(), reason="no Docker daemon")
+# Locally these skip: virtualization is disabled in BIOS on the work machine, so no Docker.
+# In CI they must run. REQUIRE_DOCKER=1 turns a missing daemon into a failure, so the
+# containment proof cannot quietly become a skip.
+_has_docker = sandbox.available()
+if os.environ.get("REQUIRE_DOCKER") == "1" and not _has_docker:
+    raise RuntimeError("REQUIRE_DOCKER=1 but no Docker daemon is reachable")
+needs_docker = pytest.mark.skipif(not _has_docker, reason="no Docker daemon (local machine)")
 
 
 @needs_docker
