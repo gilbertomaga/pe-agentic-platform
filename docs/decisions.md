@@ -25,8 +25,8 @@ and specifically the instance metadata endpoint at `169.254.169.254`. A containe
 metadata collects IAM credentials nobody granted it, and that is the difference between a sandbox and
 something that looks like one.
 
-**Fit with the client's risk.** The client is a data centre with its own security function and
-production separated from non production by account rather than by naming convention. An open egress
+**Fit with the client's risk.** The client is audit conscious, has its own security function, and
+separates production from non production by account rather than by naming convention. An open egress
 sandbox would not survive their review, and should not.
 
 ---
