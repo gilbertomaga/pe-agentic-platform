@@ -5,3 +5,4 @@ venv/
 .env
 trail/*.jsonl
 .DS_Store
+golden_path/agents/
