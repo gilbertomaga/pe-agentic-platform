@@ -83,3 +83,33 @@ normal.
 **Deny by default.** The three sets are what somebody remembered to write. The default is what
 happens to everything else, which is most of the world, and it is the single most consequential line
 in the file.
+
+---
+
+## D4 · The record, and what a hash chain does not catch
+**2026-11-06 · trail**
+
+Each record carries sequence, previous hash, timestamp, run, step, prompt, verb, target, policy
+outcome, reason, approver and event. `event` is decided, executed or failed: an action that is
+decided and then runs produces two records rather than one that gets updated. The trail is append
+only, so nothing is ever rewritten.
+
+**Written by the platform, not by the caller.** There is no code path that executes an action
+without passing through the writer. If capture were a step somebody could choose, it would be
+skipped under deadline, which is when it matters most.
+
+**The hole I found while testing.** A hash chain detects an edited record and a record removed from
+the middle, because the links stop matching. It does not detect **truncation**: delete the last
+record and every remaining one still chains correctly. That is the easiest way to hide an action,
+and the gate passed it cleanly until I tried it.
+
+**What closes it, and what it does not close.** The head, the sequence and hash of the newest
+record, is written to a separate file and checked by the gate, so a trail that ends short of its
+head is reported. This raises the bar rather than removing it: somebody who deletes the record and
+the head together passes again. Closing it properly needs an anchor outside the system, a periodic
+notarisation to append only storage or a transparency log. That is the honest limit of a local
+build, and it is where this would go on real infrastructure.
+
+**The audit gate.** Runs in CI on every change and fails on three things: a broken chain, an action
+that needed a human and went ahead without naming who approved, and an execution with no decision
+recorded before it. A trail nobody checks is a log.
