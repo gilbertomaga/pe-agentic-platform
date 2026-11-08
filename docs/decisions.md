@@ -30,3 +30,23 @@ production separated from non production by account rather than by naming conven
 sandbox would not survive their review, and should not.
 
 ---
+
+## D2 · The containment proof runs in CI, not locally
+**2026-11-06 · runtime**
+
+The three tests that prove containment, that the sandbox cannot reach the network, that a hung step
+is stopped by the clock, and that a run is torn down, execute on a GitHub Actions runner rather than
+on my machine.
+
+**Why.** Virtualization is disabled in BIOS on the work machine, so Docker cannot run there. Rather
+than describe the containment and leave it unproven, the proof moved to a runner that does have a
+daemon.
+
+**Why this is better than running it locally.** A local run proves it once, on one machine, on one
+day. In CI it is proven on every push, and the evidence is a build anyone can open. It is also the
+same pattern the client platform already uses: the proof lives in the pipeline, not in somebody
+having checked.
+
+**The trap avoided.** A skipped test is not a passing test. `REQUIRE_DOCKER=1` is set in the
+workflow, which turns a missing daemon into a collection error, so the containment proof cannot
+quietly degrade into a skip while the build stays green.
