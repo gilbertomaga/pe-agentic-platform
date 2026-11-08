@@ -113,3 +113,29 @@ build, and it is where this would go on real infrastructure.
 **The audit gate.** Runs in CI on every change and fails on three things: a broken chain, an action
 that needed a human and went ahead without naming who approved, and an execution with no decision
 recorded before it. A trail nobody checks is a log.
+
+---
+
+## D5 · The golden path narrows, it never widens
+**2026-11-06 · golden_path**
+
+A team provisioning an agent supplies three things: a name, a purpose, and the actions it needs.
+The sandbox limits, the policy binding and the trail are not theirs to choose and do not appear in
+the config at all.
+
+**The control.** Every action requested is evaluated against the policy at provisioning time. An
+agent may ask for fewer actions than the platform allows. It cannot ask for one the policy gates or
+forbids, and it cannot invent one: unlisted is denied here rather than at run time, so the failure
+arrives while somebody is still reading the output.
+
+**The defect I wrote by accident.** The first version copied the template over the workspace before
+running the gates, so a team's edits were erased before the thing that checks them ran. Every gate
+passed on an agent that had asked for `deploy:production`. This is exactly the defect I reported in
+the PE-A lab a few hours earlier, and I reproduced it without noticing. Re-running the path now
+validates an existing agent rather than resetting it, and there is a test for that specific
+behaviour because it is the kind of bug that makes every other gate meaningless while looking fine.
+
+**Adoption, instrumented from the first provisioning.** The path records itself in the trail, so
+every agent that exists came through here and is countable. The number worth watching is not how
+many came through. It is how many agents exist that are not in the trail, because those are the
+ones running without a sandbox, a policy or a record.

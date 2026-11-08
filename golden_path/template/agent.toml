@@ -1,0 +1,13 @@
+# What this agent is, and what it needs. Everything else the platform decides.
+#
+# The actions below are checked against the policy at provisioning time. You can ask for fewer
+# than the platform allows. You cannot ask for more: an action the policy gates or forbids will
+# stop the path here rather than at run time.
+
+name = "{{NAME}}"
+purpose = "Describe what this agent is for, in one line."
+
+actions = [
+  "read:repository",
+  "run:tests",
+]
