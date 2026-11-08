@@ -139,3 +139,30 @@ behaviour because it is the kind of bug that makes every other gate meaningless 
 every agent that exists came through here and is countable. The number worth watching is not how
 many came through. It is how many agents exist that are not in the trail, because those are the
 ones running without a sandbox, a policy or a record.
+
+---
+
+## D6 · The OWASP mapping says where the platform has not arrived
+**2026-11-06 · policy**
+
+Mapped against *OWASP Top 10 for Agentic Applications 2026* (OWASP GenAI Security Project, Agentic
+Security Initiative, December 2025, CC BY-SA 4.0). Full mapping in `docs/owasp-mapping.md`.
+
+Four addressed, four partial, two not addressed. The rows that are not addressed are the ones worth
+reading:
+
+**ASI04, Agentic Supply Chain Vulnerabilities.** The base image is pinned by tag rather than digest,
+nothing verifies its contents, there is no SBOM and no signature checking, and no policy governs
+which model versions may be used. It is the largest open risk on the list, and it is Module 4 work.
+
+**ASI07, Insecure Inter-Agent Communication.** One agent, no channel between agents. Recorded as not
+applicable rather than omitted, because a mapping that silently drops rows reads as coverage.
+
+**ASI06 is addressed by absence rather than by a control.** Runs are stateless, so there is no
+persistent memory to poison. That is a property of the current design, not something I built, and it
+stops being true the moment memory is added.
+
+**ASI09 is where the control depends on a human staying sceptical.** The gate on merge means a
+confident wrong answer still needs a person to accept it. The gap is that a clean, confident review
+makes a reviewer look less carefully than an empty one would, so the gate degrades exactly when the
+agent sounds most sure. Nothing measures that until there is an evaluation.
