@@ -29,9 +29,16 @@ jobs:
       - name: Pull the sandbox image
         run: docker pull --quiet python:3.12-slim
 
+      - name: Install OPA, because the golden path gates evaluate real policy
+        run: |
+          curl -sSL -o /usr/local/bin/opa https://openpolicyagent.org/downloads/latest/opa_linux_amd64_static
+          chmod +x /usr/local/bin/opa
+          opa version
+
       - name: Run the suite, with the containment tests required
         env:
           REQUIRE_DOCKER: "1"
+          REQUIRE_OPA: "1"
         run: python -m pytest -q -rs
 
   policy:
