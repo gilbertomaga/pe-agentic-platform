@@ -50,3 +50,36 @@ having checked.
 **The trap avoided.** A skipped test is not a passing test. `REQUIRE_DOCKER=1` is set in the
 workflow, which turns a missing daemon into a collection error, so the containment proof cannot
 quietly degrade into a skip while the build stays green.
+
+---
+
+## D3 · The action classification
+**2026-11-06 · policy**
+
+Three buckets, with precedence forbidden, then human gated, then autonomous. Anything in no bucket
+is denied, with a reason.
+
+**Autonomous:** read repository, read knowledge base, run tests, build image, write to a branch,
+open a pull request. All reversible, all contained, none leaves a consequence that survives the run.
+
+**Human gated:** merge to main, and deploy to every environment including dev.
+
+Opening a pull request is autonomous but merging is not, because the merge is where a change enters
+the trunk and a named human owns that. On the client estate CODEOWNERS already enforces it from both
+groups, so the gate is not new, it is the one that already exists.
+
+Dev is gated like the rest because dev environments there are shared with other teams. An unattended
+deploy to dev breaks somebody else's work, not just the agent's own, which makes it a production
+problem wearing a dev label.
+
+**Forbidden:** read customer data, write secrets, write policy.
+
+Forbidden is not a strict gate, it is a different thing. A gate implies somebody could say yes.
+Nobody here can: the approval to put customer data through a model belongs to the client's data
+governance owner, not to me and not to the model provider. And an agent that can edit its own policy
+has no policy, because every other control derives from it and the trail would record the edit as
+normal.
+
+**Deny by default.** The three sets are what somebody remembered to write. The default is what
+happens to everything else, which is most of the world, and it is the single most consequential line
+in the file.
