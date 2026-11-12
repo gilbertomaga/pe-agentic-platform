@@ -88,6 +88,22 @@ def test_reprovisioning_does_not_overwrite_the_config(tmp_path):
     assert config.read_text(encoding="utf-8") == 'name = "edited"\n'
 
 
+def test_no_policy_engine_creates_nothing(monkeypatch, capsys):
+    """A first run that fails must not leave a half provisioned agent behind.
+
+    It did: a traceback, and a directory with no provisioning record, which the adoption census
+    reads as somebody who went around the path. A broken install is not an evasion.
+    """
+    def must_not_run(*args, **kwargs):
+        raise AssertionError("the path created an agent before checking the policy engine")
+
+    monkeypatch.setattr(evaluate, "available", lambda: False)
+    monkeypatch.setattr(new_agent, "provision", must_not_run)
+
+    assert new_agent.main(["probe"]) == 2
+    assert "opa is not on PATH" in capsys.readouterr().out
+
+
 def test_provisioning_leaves_a_runnable_plan(tmp_path):
     """A documented command that cannot run is the defect this repo keeps finding elsewhere.
 

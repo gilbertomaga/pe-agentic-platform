@@ -126,6 +126,17 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     name = argv[0]
+
+    # Checked before anything is created, not when the first gate reaches for it. Without this
+    # the path left a traceback and an agent directory with no provisioning record behind it,
+    # which the adoption census would then count as somebody who went around the path. A failed
+    # run must not manufacture the signal that something was evaded.
+    if not evaluate.available():
+        print("opa is not on PATH, and the path cannot check what an agent may do without it.\n"
+              "Install it from openpolicyagent.org/docs/latest/#running-opa, or point OPA_BIN at\n"
+              "the binary, then run this again. Nothing was created.")
+        return 2
+
     workspace = provision(name)
     print(f"created {workspace}\n")
 
