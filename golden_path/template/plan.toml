@@ -1,0 +1,28 @@
+# What this agent should do. Edit it, or write another one next to it.
+#
+# A plan says what to do. It does not say what this agent is allowed to do: that is agent.toml,
+# written when the path provisioned you and already checked against the policy. An action here
+# that agent.toml does not declare is refused before it reaches a container, and the refusal is
+# both recorded and alerted. Narrowing works. Widening does not.
+#
+#     python -m runtime golden_path/agents/{{NAME}}/plan.toml
+
+agent  = "{{NAME}}"
+prompt = "run the tests and report back"
+
+[[actions]]
+verb    = "run"
+target  = "tests"
+command = ["python", "-m", "pytest", "-q"]
+
+# Uncomment to watch the platform refuse something this agent never declared.
+#
+# [[actions]]
+# verb    = "deploy"
+# target  = "production"
+# command = ["true"]
+
+# A gated action needs a named human before it runs. Nobody here approves their own.
+#
+# [approvals]
+# "deploy:production" = "a.name"

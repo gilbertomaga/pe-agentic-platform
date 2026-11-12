@@ -89,6 +89,20 @@ class Run:
         return tuple(s for s in self.steps if s.executed)
 
 
+def _why_not(result: sandbox.Result) -> str:
+    """What goes in the trail when a step did not succeed.
+
+    "sandbox error" on its own sends whoever reads this back to the machine it ran on, which by
+    then is gone. The reason the container never started belongs in the record.
+    """
+    if result.stopped_because == "timeout":
+        return "stopped by the wall clock before it finished"
+    if result.stopped_because == "error":
+        return f"the container never started: {result.stderr.strip() or 'no detail'}"
+    tail = result.stderr.strip().splitlines()
+    return f"exit code {result.exit_code}" + (f": {tail[-1]}" if tail else "")
+
+
 def execute(
     prompt: str,
     actions: list[Action],
@@ -152,7 +166,7 @@ def execute(
         result = sandbox.run(image, action.command, workspace, writable=writable)
         ran = result.stopped_because == "completed" and result.exit_code == 0
         event = "executed" if ran else "failed"
-        detail = reason if ran else f"{reason}; sandbox {result.stopped_because}"
+        detail = reason if ran else _why_not(result)
 
         record(index, action, outcome, detail, event, approver=approver)
         steps.append(Step(index, action.name, outcome, detail,

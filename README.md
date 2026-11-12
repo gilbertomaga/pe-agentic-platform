@@ -36,7 +36,7 @@ alerted: that is the gate working, and paging someone for it is how a channel be
     python -m pytest -q
     opa test policy/ -v
     python -m golden_path.new_agent my-agent
-    python -m runtime plan.toml
+    python -m runtime golden_path/agents/my-agent/plan.toml
     python -m golden_path.adoption
     python -m trail.gate
 

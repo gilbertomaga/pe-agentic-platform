@@ -27,7 +27,7 @@ from pathlib import Path
 
 from golden_path import new_agent
 from policy import evaluate
-from runtime import runner
+from runtime import runner, sandbox
 
 USAGE = "usage: python -m runtime <plan-file>"
 
@@ -79,6 +79,13 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     workspace = Path(plan.get("workspace", new_agent.AGENTS / agent)).resolve()
+
+    # Say this before anything is decided or recorded. Every action runs in a container, so
+    # without a daemon nothing can run, and a trail full of sandbox errors explains that badly.
+    if not sandbox.available():
+        print("no Docker daemon is reachable, and every action runs in a container.\n"
+              "Start Docker and run this again. Nothing was decided or recorded.")
+        return 2
 
     try:
         run = runner.execute(

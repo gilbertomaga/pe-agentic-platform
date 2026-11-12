@@ -86,3 +86,25 @@ def test_reprovisioning_does_not_overwrite_the_config(tmp_path):
 
     new_agent.provision("probe", root=tmp_path)
     assert config.read_text(encoding="utf-8") == 'name = "edited"\n'
+
+
+def test_provisioning_leaves_a_runnable_plan(tmp_path):
+    """A documented command that cannot run is the defect this repo keeps finding elsewhere.
+
+    The README told a newcomer to run `python -m runtime plan.toml` and no plan shipped, so the
+    first thing anyone following it hit was exit code 2. The path hands you one now, named for
+    your agent, and this fails if it ever stops doing that or stops being within scope.
+    """
+    workspace = new_agent.provision("probe", root=tmp_path)
+    plan = workspace / "plan.toml"
+    assert plan.exists(), "the golden path provisioned an agent with nothing to run"
+
+    spec = new_agent.load(plan)
+    declared = set(new_agent.load(workspace / "agent.toml")["actions"])
+
+    assert spec["agent"] == "probe"
+    assert spec["actions"], "the example plan has no actions"
+    for action in spec["actions"]:
+        name = f"{action['verb']}:{action['target']}"
+        assert name in declared, f"the example plan asks for {name}, which the agent never declared"
+        assert action["command"], f"{name} has no command"
