@@ -200,3 +200,41 @@ path writes a trail on every build and the gate has to clear it. The anchor is n
 because shipping an anchor without its trail is what made the hole look like an empty platform.
 
 Both are now tested: truncation of the newest record, and removal of the whole trail.
+
+## D8 · The two criteria that were ticked without an instrument
+**2026-11-12 · runtime, golden path**
+
+Auditing the done-when criteria against the code found two that were honest in intent and empty in
+practice. Both are now built, and the building changed what I think each one means.
+
+**An attempted escape is alerted and blocked.** Blocking was proven in CI. Alerting did not exist:
+the attempt went into the trail and stopped there. A trail is read afterwards by somebody who
+already suspects something, and an alert is what reaches a person who does not yet know to look.
+
+`runtime/alert.py` fires on `forbidden`, `deny` and `out_of_scope`, which are the three ways an
+agent reaches for something it was never entitled to. It deliberately does not fire on a gated
+action waiting for its approver. That is the gate working as designed, and paging someone every
+time a deploy waits is how an alert channel becomes noise nobody reads. It is the same distinction
+`trail.unresolved` already draws, and getting it wrong in either direction is the common failure:
+alert on everything and the signal is lost, alert on nothing and the control is invisible.
+
+Sinks are stderr and an optional JSONL file rather than a vendor, because every collector reads one
+of those two and the day this needs a specific SIEM, that is a sink added and nothing else changed.
+A sink that throws is caught: the action was blocked and recorded before alerting is reached, so a
+broken collector degrades the signal and never the control.
+
+**Measuring whether they choose the path or route around it.** Counting who came through was
+already possible and it is a vanity metric. It rises whether adoption is total or negligible and it
+cannot fall. `golden_path/adoption.py` counts the other side: agents that exist with no
+provisioning record, which is somebody who copied a template rather than walking the path, running
+with no sandbox binding, no policy check and no trail. That is ASI10 measured rather than described.
+
+The limit is stated by the tool itself every time it runs. It sees this host unless it is given an
+inventory, and no code inside the platform could ever see an agent on somebody else's laptop or
+called straight from a CI job. A coverage number that does not state its denominator is worse than
+no number, so the report prints the denominator next to the percentage, and reports no share at all
+rather than rounding zero over zero up to full adoption.
+
+Provisioning attempts that stopped at a gate are counted too. They are not failures, they are the
+platform's friction, and friction is what sends a Builder looking for the way around. A rising
+number there is the leading indicator of a falling number above.

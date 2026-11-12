@@ -12,13 +12,14 @@ an invariant.
 """
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
 import pytest
 
 from policy import evaluate
-from runtime import runner, sandbox
+from runtime import alert, runner, sandbox
 from trail import gate, trail
 
 _has_opa = evaluate.available()
@@ -171,6 +172,62 @@ def test_a_real_run_executes_in_a_container_and_leaves_a_trail(path, tmp_path):
     assert run.stopped_because == "completed"
     assert run.executed[0].result.stdout.strip() == "ok"
     assert gate.check(path) == []
+
+
+# ------------------------------------------------------ an attempt is alerted, not only blocked
+def test_an_out_of_scope_action_raises_an_alert(path, no_container, tmp_path, capsys):
+    runner.execute("do a thing", [READ], scope=["run:tests"],
+                   workspace=tmp_path, trail_path=path)
+
+    err = capsys.readouterr().err
+    assert "ESCAPE ATTEMPT BLOCKED" in err
+    assert "read:repository" in err
+
+
+@needs_opa
+def test_a_forbidden_action_raises_an_alert(path, no_container, tmp_path, capsys):
+    runner.execute("write a secret", [SECRET], scope=SCOPE,
+                   workspace=tmp_path, trail_path=path)
+
+    assert "ESCAPE ATTEMPT BLOCKED" in capsys.readouterr().err
+
+
+@needs_opa
+def test_waiting_for_an_approver_is_not_an_escape_attempt(path, no_container, tmp_path, capsys):
+    """The gate working is not an alert. Page someone for this and the channel becomes noise."""
+    runner.execute("ship it", [DEPLOY], scope=SCOPE, workspace=tmp_path, trail_path=path)
+
+    assert "ESCAPE ATTEMPT" not in capsys.readouterr().err
+
+
+def test_the_alert_names_the_run_and_the_action_in_a_file(path, no_container, tmp_path,
+                                                          monkeypatch):
+    sink = tmp_path / "alerts.jsonl"
+    monkeypatch.setenv(alert.ALERT_FILE_ENV, str(sink))
+
+    run = runner.execute("do a thing", [READ], scope=["run:tests"],
+                         workspace=tmp_path, trail_path=path)
+
+    written = json.loads(sink.read_text(encoding="utf-8").strip())
+    assert written["run_id"] == run.run_id
+    assert written["action"] == "read:repository"
+    assert written["outcome"] == "out_of_scope"
+
+
+def test_a_broken_alert_sink_does_not_unblock_the_action(path, no_container, tmp_path,
+                                                         monkeypatch):
+    """Degrade the signal, never the control."""
+    def boom(_alert):
+        raise RuntimeError("the collector is down")
+
+    monkeypatch.setattr(alert, "_stderr", boom)
+
+    run = runner.execute("do a thing", [READ], scope=["run:tests"],
+                         workspace=tmp_path, trail_path=path)
+
+    assert run.stopped_because == "refused"
+    assert no_container == []
+    assert trail.read_all(path)[0]["outcome"] == "out_of_scope"
 
 
 # ------------------------------------------------------ the invariant, structurally

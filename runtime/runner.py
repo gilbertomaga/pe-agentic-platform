@@ -35,7 +35,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from policy import evaluate
-from runtime import sandbox
+from runtime import alert, sandbox
 from trail import trail
 
 #: Bounds breadth. The sandbox wall clock bounds duration. Neither substitutes for the other:
@@ -126,6 +126,7 @@ def execute(
         if action.name not in allowed:
             reason = f"{action.name} is not in this agent's declared actions"
             record(index, action, "out_of_scope", reason, "decided")
+            alert.raise_alert(run_id, index, action.name, "out_of_scope", reason)
             steps.append(Step(index, action.name, "out_of_scope", reason, executed=False))
             return Run(run_id, tuple(steps), "refused")
 
@@ -138,6 +139,8 @@ def execute(
         record(index, action, outcome, reason, "decided", approver=approver)
 
         if outcome not in ("allow", "human_gated"):
+            # Blocked and recorded above. The alert is what reaches someone who was not looking.
+            alert.raise_alert(run_id, index, action.name, outcome, reason)
             steps.append(Step(index, action.name, outcome, reason, executed=False))
             return Run(run_id, tuple(steps), "refused")
 

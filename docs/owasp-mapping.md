@@ -32,6 +32,10 @@ This is containment rather than prevention, and the distinction matters. A hijac
 platform still cannot deploy, read customer data or rewrite its own policy. It can still waste a
 run and produce a wrong answer.
 
+What changed with `runtime/alert.py` is the time to notice. A hijacked goal reaching for a
+forbidden or undeclared action now raises an alert at the moment it is blocked, rather than sitting
+in the trail until somebody reads it. The row stays partial: noticing faster is not preventing.
+
 ## ASI02 · Tool Misuse and Exploitation — addressed
 
 The policy is an action allowlist. An agent may use what is classified autonomous and nothing else,
@@ -96,3 +100,8 @@ in here.
 What this buys is the number worth watching: not how many agents came through the path, but how
 many exist that are not in the trail. Those are the ones running with no sandbox, no policy and no
 record, and they are the rogue agents in practice.
+
+`python -m golden_path.adoption` is that count. It reports agents that exist with no provisioning
+record, and it states its denominator every time, because it sees this host unless it is handed an
+inventory and no code in here could ever see further. The row stays at measured rather than
+addressed: a number that names the gap is not a control that closes it.

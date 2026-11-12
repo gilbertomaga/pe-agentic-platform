@@ -17,8 +17,9 @@ record is anchored separately, because a chain alone does not detect truncation.
 
 **A golden path that narrows.** Provisioning an agent takes a name, a purpose and the actions it
 needs. An agent can ask for fewer actions than the platform allows and never for more, so there is
-no privilege route through onboarding. Provisioning records itself, which is where the adoption
-number comes from.
+no privilege route through onboarding. Provisioning records itself, so the census can count who
+came through and, more usefully, who did not: an agent that exists with no provisioning record is
+somebody who copied a template instead of walking the path, and that is the number worth watching.
 
 **One path, not four parts.** `runtime/runner.py` is the only way an action happens: scope, then
 policy, then a record of the decision, then the approver if the policy gates it, then the sandbox,
@@ -26,11 +27,17 @@ then a record of what ran. It fails closed when the policy engine is unreachable
 first refusal instead of continuing down the list. A test fails the build if any other module
 reaches a container directly, because an invariant nobody enforces is a convention.
 
+An action the agent never declared, or one the policy forbids, is blocked, recorded and then
+alerted on stderr and to `PLATFORM_ALERT_FILE`. A gated action waiting for its approver is not
+alerted: that is the gate working, and paging someone for it is how a channel becomes noise.
+
 ## Running it
 
     python -m pytest -q
     opa test policy/ -v
     python -m golden_path.new_agent my-agent
+    python -m runtime plan.toml
+    python -m golden_path.adoption
     python -m trail.gate
 
 CI runs the containment proof on every push. The sandbox test opens a socket from inside the
