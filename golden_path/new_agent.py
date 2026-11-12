@@ -137,8 +137,12 @@ def main(argv: list[str] | None = None) -> int:
               "the binary, then run this again. Nothing was created.")
         return 2
 
+    # D5 says re-running the path validates rather than resets, and then the output said
+    # "created" on every run. Somebody re-running it after an edit has to wonder whether their
+    # file survived, which is a cheap way to lose the trust the decision was protecting.
+    existing = (AGENTS / name / "agent.toml").exists()
     workspace = provision(name)
-    print(f"created {workspace}\n")
+    print(f"{'checking' if existing else 'created'} {workspace}\n")
 
     cleared = True
     for gate in gates(workspace / "agent.toml"):
