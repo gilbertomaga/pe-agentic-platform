@@ -45,8 +45,12 @@ def main(argv: list[str] | None = None) -> int:
     argv = argv if argv is not None else sys.argv[1:]
     path = Path(argv[0]) if argv else trail.DEFAULT_TRAIL
 
-    if not path.exists():
-        print(f"no trail at {path}; nothing to gate")
+    # A missing trail is only innocent when there is no anchor either. An anchor without its
+    # trail is the whole thing removed, which is the one tamper a chain cannot see from inside,
+    # and it is exactly what the anchor exists to catch. Returning 0 here made the gate agree
+    # that nothing happened, which was the most expensive two lines in the platform.
+    if not path.exists() and not trail.head_path(path).exists():
+        print(f"no trail at {path} and no anchor; nothing to gate")
         return 0
 
     problems = check(path)

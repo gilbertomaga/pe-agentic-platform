@@ -4,5 +4,6 @@ __pycache__/
 venv/
 .env
 trail/*.jsonl
+trail/*.head
 .DS_Store
 golden_path/agents/

@@ -20,6 +20,12 @@ needs. An agent can ask for fewer actions than the platform allows and never for
 no privilege route through onboarding. Provisioning records itself, which is where the adoption
 number comes from.
 
+**One path, not four parts.** `runtime/runner.py` is the only way an action happens: scope, then
+policy, then a record of the decision, then the approver if the policy gates it, then the sandbox,
+then a record of what ran. It fails closed when the policy engine is unreachable and stops at the
+first refusal instead of continuing down the list. A test fails the build if any other module
+reaches a container directly, because an invariant nobody enforces is a convention.
+
 ## Running it
 
     python -m pytest -q
@@ -29,7 +35,9 @@ number comes from.
 
 CI runs the containment proof on every push. The sandbox test opens a socket from inside the
 container and fails if it connects. Tests do not skip there: a missing Docker daemon or a missing
-OPA fails the build rather than quietly reducing the proof to a skip.
+OPA fails the build rather than quietly reducing the proof to a skip. The audit gate runs there
+too, against a trail the golden path writes during the build, because a gate that only ever runs
+against its own fixtures is a library.
 
 ## Reading it
 

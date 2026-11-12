@@ -64,6 +64,38 @@ def test_a_removed_record_breaks_the_chain(path):
     assert trail.verify(path), "a removed record was not detected"
 
 
+def test_truncation_is_detected(path):
+    """The one tamper a chain cannot see from inside.
+
+    Delete the newest record and every remaining one still links correctly, so verify() has
+    nothing to complain about until it checks the anchor. This is the whole reason the head is
+    written separately, and it went untested until the claim was audited.
+    """
+    write_run(path, approver="r.okonkwo")
+    rows = path.read_text(encoding="utf-8").splitlines()
+    path.write_text("\n".join(rows[:-1]) + "\n", encoding="utf-8")
+
+    faults = trail.verify(path)
+    assert faults, "the newest record was removed and nothing noticed"
+    assert any("removed from the end" in f.why for f in faults)
+
+
+def test_removing_the_whole_trail_is_detected(path):
+    """An anchor with no trail is not an empty platform, it is an erased one."""
+    write_run(path, approver="r.okonkwo")
+    path.unlink()
+
+    assert trail.head_path(path).exists(), "the anchor is what is left to catch this"
+    assert gate.check(path), "the trail was deleted and the gate said nothing"
+    assert gate.main([str(path)]) == 1
+
+
+def test_a_platform_with_no_trail_and_no_anchor_passes(path):
+    """Nothing has run yet. That is not a tamper, and the gate must not cry wolf about it."""
+    assert not path.exists()
+    assert gate.main([str(path)]) == 0
+
+
 def test_an_approved_action_names_the_approver(path):
     write_run(path, approver="r.okonkwo")
     deploy = [e for e in trail.find("RUN-1", path) if e["verb"] == "deploy"]

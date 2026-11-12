@@ -166,3 +166,37 @@ stops being true the moment memory is added.
 confident wrong answer still needs a person to accept it. The gap is that a clean, confident review
 makes a reviewer look less carefully than an empty one would, so the gate degrades exactly when the
 agent sounds most sure. Nothing measures that until there is an evaluation.
+
+## D7 · The runtime is the join, and the gate was not guarding anything
+**2026-11-12 · runtime, trail**
+
+Auditing my own criteria before submitting found the defect this platform was built to make
+impossible, which is the third one I have written and then caught.
+
+The three parts were real and separate. `policy/evaluate.py` was called once, by the provisioning
+gate. `trail/trail.py` was written once, by the same place. `runtime/sandbox.py` imported neither
+and executed commands. So "every action is evaluated before it runs" and "every run leaves a
+record" were properties of the design and not of the code, and a sandbox run left nothing behind
+at all. A reviewer opening `sandbox.py` would have seen that in about ten seconds.
+
+`runtime/runner.py` is the join. One action takes one path: scope, then policy, then a decided
+record, then the approver if the policy gates it, then the sandbox, then an executed record. It
+fails closed, it stops at the first refusal rather than continuing down the list, and the decision
+is written before the action rather than after, because a record written afterwards is a report.
+
+The invariant is asserted structurally as well as behaviourally. `test_nothing_outside_the_runtime
+_calls_the_sandbox_directly` fails if any module reaches a container without going through
+`execute()`, because an invariant that depends on everybody remembering it is a convention.
+
+The second half is worse and smaller. `trail/*.jsonl` was ignored by git while
+`audit_trail.jsonl.head` was committed, so a fresh clone had an anchor claiming ten records and no
+trail. The gate opened with `if not path.exists(): return 0` and said "nothing to gate". Deleting
+the entire trail passed. The anchor exists precisely to catch that, `verify()` catches it
+correctly, and `main()` returned before ever asking. Two lines, and they made the control
+agree that nothing had happened.
+
+The gate was also not in CI at all, which the workbook claimed it was. It runs now: the golden
+path writes a trail on every build and the gate has to clear it. The anchor is no longer committed,
+because shipping an anchor without its trail is what made the hole look like an empty platform.
+
+Both are now tested: truncation of the newest record, and removal of the whole trail.

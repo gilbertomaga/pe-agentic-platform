@@ -41,6 +41,15 @@ jobs:
           REQUIRE_OPA: "1"
         run: python -m pytest -q -rs
 
+      # The gate is a control rather than a library, so it has to run against a real trail on
+      # every change, not only against fixtures inside the suite. The golden path writes the
+      # trail, the gate then has to clear it, and a non-zero exit stops the build.
+      - name: Walk the golden path, which writes a trail
+        run: python -m golden_path.new_agent ci-probe
+
+      - name: Audit gate
+        run: python -m trail.gate
+
   policy:
     runs-on: ubuntu-latest
     steps:
