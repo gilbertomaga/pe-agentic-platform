@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 
+from golden_path import new_agent
 from policy import evaluate
 from runtime import alert, runner, sandbox
 from trail import gate, trail
@@ -172,6 +173,48 @@ def test_a_real_run_executes_in_a_container_and_leaves_a_trail(path, tmp_path):
     assert run.stopped_because == "completed"
     assert run.executed[0].result.stdout.strip() == "ok"
     assert gate.check(path) == []
+
+
+# ------------------------------------------------------ the approval route, end to end
+@needs_opa
+def test_a_gated_action_declared_at_provisioning_can_be_approved(path, no_container, tmp_path):
+    """The route that did not exist, from provisioning through to a named human.
+
+    The golden path refused gated actions, so one could never be declared, so the runtime always
+    saw it as out of scope, so nothing in the product could ever reach the approver. This walks
+    the whole way: declare it, clear the path, name a human in the plan, and watch it run with
+    their name on the record.
+    """
+    workspace = new_agent.provision("probe", root=tmp_path)
+    (workspace / "agent.toml").write_text(
+        'name = "probe"\npurpose = "a probe"\n'
+        'actions = [\n  "run:tests",\n  "deploy:production",\n]\n', encoding="utf-8")
+
+    assert all(g.passed for g in new_agent.gates(workspace / "agent.toml"))
+
+    scope = new_agent.load(workspace / "agent.toml")["actions"]
+    run = runner.execute("ship it", [DEPLOY], scope=scope, workspace=tmp_path,
+                         trail_path=path, approvals={"deploy:production": "r.okonkwo"})
+
+    assert run.stopped_because == "completed"
+    assert run.executed[0].approver == "r.okonkwo"
+    assert trail.unresolved(path) == []
+    assert gate.check(path) == []
+
+
+@needs_opa
+def test_the_same_action_without_an_approver_still_stops(path, no_container, tmp_path):
+    """Declarable is not approved. The gate is the run time check, not the provisioning one."""
+    workspace = new_agent.provision("probe", root=tmp_path)
+    (workspace / "agent.toml").write_text(
+        'name = "probe"\npurpose = "a probe"\n'
+        'actions = [\n  "deploy:production",\n]\n', encoding="utf-8")
+
+    scope = new_agent.load(workspace / "agent.toml")["actions"]
+    run = runner.execute("ship it", [DEPLOY], scope=scope, workspace=tmp_path, trail_path=path)
+
+    assert run.stopped_because == "needs_approval"
+    assert no_container == []
 
 
 # ------------------------------------------------------ an attempt is alerted, not only blocked

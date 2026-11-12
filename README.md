@@ -16,8 +16,10 @@ executes. Append only and hash chained, so an edited or removed entry breaks the
 record is anchored separately, because a chain alone does not detect truncation.
 
 **A golden path that narrows.** Provisioning an agent takes a name, a purpose and the actions it
-needs. An agent can ask for fewer actions than the platform allows and never for more, so there is
-no privilege route through onboarding. Provisioning records itself, so the census can count who
+needs. An agent cannot give itself an action the policy forbids or has no rule for, so there is no
+privilege route through onboarding. It may declare a gated one, and the path says so, but gated is
+what it stays: the human is named in the plan at run time, and nobody approves their own.
+Provisioning records itself, so the census can count who
 came through and, more usefully, who did not: an agent that exists with no provisioning record is
 somebody who copied a template instead of walking the path, and that is the number worth watching.
 

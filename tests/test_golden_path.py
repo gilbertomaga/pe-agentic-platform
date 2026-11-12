@@ -46,11 +46,20 @@ def test_a_well_formed_agent_clears_the_path(agent):
 
 
 @needs_opa
-def test_an_agent_cannot_grant_itself_a_gated_action(agent):
-    """The path narrows. It never widens."""
-    bad = failure(new_agent.gates(agent(["read:repository", "deploy:production"])))
-    assert bad.name == "actions are within policy"
-    assert "human_gated" in bad.detail
+def test_a_gated_action_is_declarable_and_says_it_needs_a_human(agent):
+    """Declaring a gated action is not a privilege grab, because it stays gated.
+
+    The path used to refuse it outright, which meant a gated action could never be declared, so
+    it could never reach the runtime, so it could never be approved. The approver field, the
+    unresolved check and half the audit gate were unreachable through the product.
+    """
+    checks = new_agent.gates(agent(["read:repository", "deploy:production"]))
+    assert passed(checks), "a gated action is allowed to be declared"
+
+    policy = next(c for c in checks if c.name == "actions are within policy")
+    assert "deploy:production" in policy.detail
+    assert "named approver" in policy.detail
+    assert "plan.toml" in policy.detail, "say where to name one, not only that one is needed"
 
 
 @needs_opa

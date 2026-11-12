@@ -1,8 +1,11 @@
 # What this agent is, and what it needs. Everything else the platform decides.
 #
-# The actions below are checked against the policy at provisioning time. You can ask for fewer
-# than the platform allows. You cannot ask for more: an action the policy gates or forbids will
-# stop the path here rather than at run time.
+# The actions below are checked against the policy when you run the path. An action the policy
+# forbids, or has no rule for, stops the path here rather than at run time.
+#
+# A gated action is different. You may declare one, and the path will tell you so, but it will not
+# run until a named human is in the [approvals] block of plan.toml. Declaring it is not granting
+# it to yourself: it stays gated, and nobody approves their own.
 
 name = "{{NAME}}"
 purpose = "Describe what this agent is for, in one line."

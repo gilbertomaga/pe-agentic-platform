@@ -238,3 +238,33 @@ rather than rounding zero over zero up to full adoption.
 Provisioning attempts that stopped at a gate are counted too. They are not failures, they are the
 platform's friction, and friction is what sends a Builder looking for the way around. A rising
 number there is the leading indicator of a falling number above.
+
+## D9 · A gated action has to be declarable, or the human gate is unreachable
+**2026-11-12 · golden path, runtime**
+
+Somebody who had never seen this repository ran the golden path on a Mac and sent back five
+things. This is the one that was a gap rather than a rough edge, and I had not seen it in a week
+of working on the code.
+
+The path refused any action the policy did not treat as autonomous, gated ones included, on the
+grounds that it narrows and never widens. The runtime then refuses anything the agent did not
+declare in `agent.toml`. Put those together and a gated action could never be declared, so it
+could never reach the runtime, so it could never be approved. The `approvals` block, the
+`approver` field in every record, `trail.unresolved` and the audit gate's unnamed-approval check
+were all unreachable through the product. My own tests exercised them only by calling `execute()`
+with a hand built scope, which is the shape of a test that proves a mechanism works and not that
+anything can get to it.
+
+D5 was right about what it was protecting and wrong about how. The thing that must not happen is
+an agent granting itself an action, and declaring a gated one is not that, because it stays gated.
+Forbidden and unlisted still stop the path. A gated action is accepted, the path says it will need
+a named approver and where to put one, and the human is named at run time, which is the only place
+a human can be named at all.
+
+The other four were friction rather than gaps, and three of them were about the first two minutes:
+a stock macOS has no `python` and its `python3` is 3.9, where this fails on `import tomllib` with
+a traceback and no hint; the refusal said a named approver was required without saying where to
+name one; and provisioning wrote three files while naming only the folder. All three are now
+handled, and the version guard sits in the package `__init__` so it runs before anything can
+import tomllib and fail less kindly. `new_agent.py` also imported `subprocess` and never used it,
+which is the kind of thing only a stranger reads closely enough to notice.

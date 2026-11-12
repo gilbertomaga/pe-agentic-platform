@@ -17,7 +17,6 @@ Provisioning is itself recorded in the trail, which is where the adoption number
 """
 from __future__ import annotations
 
-import subprocess
 import sys
 import tomllib
 from dataclasses import dataclass
@@ -72,16 +71,31 @@ def gates(config: Path) -> list[Gate]:
             return checks
     checks.append(Gate("config complete", True))
 
-    # The control that matters: an agent cannot grant itself more than the policy allows.
+    # The control that matters: an agent cannot grant itself an action the policy forbids or has
+    # never heard of. A gated one is different, and treating the two the same was a real gap.
+    # Refusing gated actions here meant one could never be declared, so it could never reach the
+    # runtime, so it could never be approved: the approver field, trail.unresolved and half the
+    # audit gate were unreachable through the product. Declaring a gated action is not a privilege
+    # grab, because it stays gated. The human is named at run time, which is the only place a
+    # human can be named. See docs/decisions.md D9.
+    needs_a_human = []
     for action in spec["actions"]:
         verb, _, target = action.partition(":")
         decision = evaluate.decide(verb, target)
+        if decision["outcome"] == "human_gated":
+            needs_a_human.append(action)
+            continue
         if decision["outcome"] != "allow":
             checks.append(Gate(
                 "actions are within policy", False,
-                f"{action} is {decision['outcome']}, not autonomous: {decision['reason']}"))
+                f"{action} is {decision['outcome']}: {decision['reason']}"))
             return checks
-    checks.append(Gate("actions are within policy", True))
+
+    checks.append(Gate(
+        "actions are within policy", True,
+        "" if not needs_a_human else
+        f"{', '.join(needs_a_human)} will not run without a named approver. "
+        f"Name one in the [approvals] block of this agent's plan.toml."))
 
     checks.append(Gate("sandbox has no network", SANDBOX_DEFAULTS["network"] == "none"))
     checks.append(Gate("sandbox is time bounded", SANDBOX_DEFAULTS["timeout_seconds"] > 0))
@@ -142,7 +156,13 @@ def main(argv: list[str] | None = None) -> int:
     # file survived, which is a cheap way to lose the trust the decision was protecting.
     existing = (AGENTS / name / "agent.toml").exists()
     workspace = provision(name)
-    print(f"{'checking' if existing else 'created'} {workspace}\n")
+
+    # Name the files, not just the folder. Provisioning writes three and the output used to
+    # mention none of them, so the first thing a newcomer does is ls to find out what they got.
+    print(f"{'checking' if existing else 'created'} {workspace}")
+    for written in sorted(p.name for p in workspace.iterdir()):
+        print(f"    {written}")
+    print()
 
     cleared = True
     for gate in gates(workspace / "agent.toml"):
