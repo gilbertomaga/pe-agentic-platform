@@ -587,3 +587,82 @@ receipt and not in the bundle, applied in the other direction.
 **One thing deliberately cannot be excepted.** A committed secret produces no finding
 identifiers, so there is nothing for an exception to match on and the control blocks until the
 scan is clean. A leaked credential is rotated, not carried for a month.
+
+
+## D15 · The client's controls, when nobody can tell you what they are
+
+**2026-11-16 · policy, compliance, assurance**
+
+This was blocked on a question I had been treating as somebody else's to answer: which control
+framework is this platform actually held to. Grepping the codebase for the usual names had found
+nothing, which proves only that control frameworks do not live in code.
+
+So I looked where they do live. The client has a compliance and integrated risk function and a
+Confluence space for it. The space contains three things: the default welcome page, the default
+banner image that came with it, and the space itself. Created in March, never written in.
+
+What exists instead is on the engineering wiki. A numbered data protection requirement set, R01
+to R11 with a retention sub-set beneath one of them, written by somebody who has since left the
+company, last edited in 2025, twenty views. A per rollout checklist with its own lettered
+sections and Pass or Gap against each. A list in a QA space of the artifacts that team keeps for
+software lifecycle compliance. All three are real and in use. None of them is a control framework
+anybody is held to, and treating one as if it were is how a platform ends up mapped to a
+document nobody agreed to.
+
+**So the platform must not depend on knowing.** Two changes, and the first is the one that
+matters.
+
+**The mapping is now required and the absence of one is a stated absence.** Every control names
+either `maps_to`, with references into the client's framework, or `unmapped_because`, with the
+reason there are none, and the catalog refuses to load if a control says neither. The mapping is
+the thing an auditor reads, and silence in that field reads as mapped to whatever the reader
+assumes.
+
+Four of fifteen controls carry a reference, to the clauses of that data protection set where the
+fit is honest: records of processing, immutable logs, approval workflows, assigned
+responsibility. The other eleven say why they have none, and the reason is almost always the same
+one: the only numbered requirement set available is about personal data and most of this
+platform's controls are about engineering assurance. The supply chain controls are the sharpest
+case, because nothing in that requirement set reaches a supply chain at all.
+
+That split is the useful output. A catalog where everything maps is a catalog that is guessing,
+and the eleven reasons are a better thing to put in front of their risk function than a
+mapping I invented. The references that are there are marked as proposals in the catalog's own
+header, because nobody has confirmed them.
+
+**The client's controls live in their own file.** `policy/compliance.rego`, its own package,
+evaluated through its own entry point. `agent.rego` is the platform's guardrail and changes when
+the platform changes. This one belongs to the client, so when their control set arrives it is a
+file that gets replaced rather than a change that reaches into the runtime.
+
+**The control I implemented, and why that one.** Separation of duties: the person who approves an
+action is not the person who requested it. It is in every control framework there has ever been,
+and this platform claimed it. The plan template said "nobody here approves their own" in a
+comment, and nothing checked it. Worse than unenforced, it was uncheckable: the trail recorded
+who approved and never recorded who asked, so there was no second name to compare against.
+
+Finding that the platform asserted a control it could not evaluate is worth more than the fix.
+
+**Where the requester went.** Into `evidence`, not into a field of its own, because the signed
+field set was frozen in D10 after changing it broke every record written before. Evidence is
+already inside the hash, which is the property that matters here: a separation of duties control
+is worth nothing if the name of whoever asked can be edited afterwards. The freeze paid for
+itself the first time it was tested.
+
+**Two kinds of stop, kept apart.** A gated action still waiting for an approver halts quietly
+with no alert, because that is the gate working. Somebody approving their own request is an
+attempt to get around a control, so it is refused, recorded as non compliant, and alerted. Those
+are different events and collapsing them would make one of them invisible.
+
+**The evidence is read back off the record.** The runtime refuses a non compliant action, so in
+the normal case the check against the trail can only ever confirm. That is deliberate: a control
+is evidenced by the record it left, not by the assurance that a gate ran, and a record written by
+an older runtime or by any route that stopped going through the gate fails here rather than being
+assumed clean.
+
+**What this does not do.** Comparing names without case or spacing catches the careless case. It
+is not identity resolution, and anybody determined to approve their own work can do it with a
+second account. That is a joiners and leavers problem and no policy file reaches it. The platform
+also has no environments, so "evaluated against every environment" is a property of this control
+set it cannot demonstrate here; on the client's estate it is the same policy evaluated in the
+same pipeline, which is where that sentence becomes testable.

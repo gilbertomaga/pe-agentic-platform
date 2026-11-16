@@ -141,6 +141,10 @@ def assess(control, facts: dict[str, collect.Fact], root: Path, today: date,
         "statement": control.statement,
         "satisfied_by": control.kind,
         "evidence": control.fact or control.attestation or None,
+        # The mapping is what an auditor actually checks, so it travels with the result rather
+        # than living only in the catalog. A control with no reference says why.
+        "maps_to": list(control.maps_to),
+        "unmapped_because": control.unmapped_because,
         "state": state,
         "detail": detail,
         "blocking": control.blocking,

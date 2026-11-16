@@ -11,10 +11,20 @@
 #   attestation  a person accepted something no scanner can see; it carries a name and expires
 #   gap          the control cannot be met yet, with the reason, tracked rather than silent
 #
+# And exactly one of:
+#   maps_to           references into the client's framework, which is what an auditor checks
+#   unmapped_because  the reason there are none, because silence reads as mapped
+#
+# The `DPR` references are candidates, not confirmations. They point at a numbered data
+# protection requirement set found on the client's own wiki, authored by somebody who has since
+# left and last touched in 2025. Nobody in their compliance function has confirmed it is what
+# this platform is held to, and until somebody does, every reference here is a proposal. See
+# docs/decisions.md D15 for what the search found and what it did not.
+#
 # `blocking = true` means a change that fails this control does not ship. The bundle still lands
 # in the evidence store either way. See docs/decisions.md D11 for why that is not a contradiction.
 
-version = "demo-1"
+version = "demo-2"
 framework = "Demonstration control set for an agentic delivery platform"
 source = "written for this platform, not taken from any client or standard"
 
@@ -24,18 +34,33 @@ source = "written for this platform, not taken from any client or standard"
 id = "DEMO-TR-01"
 statement = "Every action an automated agent takes is recorded against the request that caused it and the decision that allowed it."
 fact = "trail.run_recorded"
+maps_to = ["DPR R09 (maintain records of processing activities)"]
 blocking = true
 
 [[control]]
 id = "DEMO-TR-02"
 statement = "The record of what was done cannot be altered or removed after the fact without detection."
 fact = "trail.chain_intact"
+maps_to = [
+    "DPR R06/04 (logs must be immutable)",
+    "DPR R09 (enable internal and external audits)",
+]
 blocking = true
 
 [[control]]
 id = "DEMO-TR-03"
 statement = "An action requiring human authorisation does not proceed without a named person recorded against it."
 fact = "trail.no_unnamed_approvals"
+maps_to = ["DPR R06/07 (approval workflows for sensitive actions)"]
+blocking = true
+
+# ------------------------------------------------- the people, not the action
+
+[[control]]
+id = "DEMO-GV-02"
+statement = "The person who approves an action is not the person who requested it, and both are named."
+fact = "compliance.separation_of_duties"
+maps_to = ["DPR R07 (role based access control and strict authorisation policies)"]
 blocking = true
 
 # ---------------------------------------------------------------------- quality
@@ -44,18 +69,21 @@ blocking = true
 id = "DEMO-QA-01"
 statement = "Change is tested automatically before it ships, and a failing test stops it."
 fact = "tests.all_passed"
+unmapped_because = "The only numbered requirement set on the client's wiki is a data protection one. It says nothing about testing, and mapping this to a clause that does not cover it would read as compliance where there is none."
 blocking = true
 
 [[control]]
 id = "DEMO-QA-02"
 statement = "The isolation controls are exercised against a real runtime on every change, not asserted in configuration."
 fact = "tests.containment_exercised"
+unmapped_because = "Arguably within a general security clause, but the clause is about protecting personal data and this platform processes none. Claiming the mapping would be an inference presented as a reference."
 blocking = true
 
 [[control]]
 id = "DEMO-QA-03"
 statement = "A change does not ship if it leaves more code untested than it found, and the bar it is held to is a reviewed number rather than a computed one."
 fact = "quality.no_new_untested_code"
+unmapped_because = "No clause in the available requirement set covers code quality."
 blocking = true
 
 # --------------------------------------------------------------- supply chain
@@ -64,18 +92,21 @@ blocking = true
 id = "DEMO-SC-01"
 statement = "What executes is fixed by content, so the thing reviewed is the thing that runs."
 fact = "supply.image_pinned"
+unmapped_because = "Supply chain integrity is absent from the available requirement set. This is the gap most worth raising with their compliance function rather than papering over."
 blocking = true
 
 [[control]]
 id = "DEMO-SC-02"
 statement = "The component that makes the security decisions is verified against a published checksum before it is used."
 fact = "supply.policy_engine_verified"
+unmapped_because = "As DEMO-SC-01: nothing in the available requirement set reaches the supply chain."
 blocking = true
 
 [[control]]
 id = "DEMO-SC-03"
 statement = "The contents of what executes are disclosed in a machine readable bill of materials, retained with the change."
 fact = "supply.bill_of_materials"
+unmapped_because = "As DEMO-SC-01. A bill of materials is also the thing that makes a breach notification answerable, so a mapping may exist once the real framework is in hand."
 blocking = false
 
 # ------------------------------------------------- security, scanned on every change
@@ -84,12 +115,14 @@ blocking = false
 id = "DEMO-SE-01"
 statement = "Source is scanned for committed secrets across the repository's whole history, and a finding blocks."
 fact = "security.no_committed_secrets"
+unmapped_because = "Plausibly within the clause on unauthorised access, but that clause is about personal data and a committed credential is a different exposure. The inference is mine and is not a reference."
 blocking = true
 
 [[control]]
 id = "DEMO-SE-02"
 statement = "The image that executes is scanned for known vulnerabilities, and a finding with a fix available blocks."
 fact = "security.image_free_of_fixable_vulnerabilities"
+unmapped_because = "No clause in the available requirement set covers vulnerability management."
 blocking = true
 
 # ------------------------------------------------------------- needs a human
@@ -99,6 +132,7 @@ id = "DEMO-GV-01"
 statement = "A named owner has accepted the residual risk of operating the agent fleet at its current level of assurance."
 attestation = "attestations/residual-risk.toml"
 valid_days = 90
+maps_to = ["DPR R09 (assign data protection responsibilities within the organisation)"]
 blocking = true
 
 # ------------------------------------------------------- declared, not met yet
@@ -107,10 +141,12 @@ blocking = true
 id = "DEMO-SC-04"
 statement = "Artifacts are signed by a named publisher identity and their provenance is attested."
 gap = "The base image is not signed by any publisher identity this platform can name, and verifying nothing against nobody is theatre with a green tick on it. This closes at the point the platform builds its own image. See docs/decisions.md D10."
+unmapped_because = "As DEMO-SC-01: the supply chain is absent from the available requirement set."
 blocking = false
 
 [[control]]
 id = "DEMO-SE-03"
 statement = "A vulnerability with no fix available is tracked to a decision rather than carried silently."
 gap = "The image gate blocks on fixable findings only, because a build cannot act on a vulnerability with no patch. The unfixable ones are counted in every bundle and nothing yet routes them to a person. That is the honest shape of the gap: visible, not handled. See docs/decisions.md D13."
+unmapped_because = "No clause in the available requirement set covers vulnerability management."
 blocking = false

@@ -84,13 +84,13 @@ def catalog(tmp_path):
         'framework = "test"\n'
         'source = "written for this test"\n'
         '[[control]]\nid = "T-1"\nstatement = "Recorded."\n'
-        'fact = "trail.run_recorded"\nblocking = true\n'
+        'fact = "trail.run_recorded"\nmaps_to = ["X-1"]\nblocking = true\n'
         '[[control]]\nid = "T-2"\nstatement = "Tested."\n'
-        'fact = "tests.all_passed"\nblocking = true\n'
+        'fact = "tests.all_passed"\nunmapped_because = "no clause"\nblocking = true\n'
         '[[control]]\nid = "T-3"\nstatement = "Signed off."\n'
-        'attestation = "att.toml"\nvalid_days = 30\nblocking = true\n'
+        'attestation = "att.toml"\nvalid_days = 30\nmaps_to = ["X-2"]\nblocking = true\n'
         '[[control]]\nid = "T-4"\nstatement = "Not met yet."\n'
-        'gap = "named and tracked"\nblocking = false\n', encoding="utf-8")
+        'gap = "named and tracked"\nunmapped_because = "no clause"\nblocking = false\n', encoding="utf-8")
     (tmp_path / "att.toml").write_text(
         'control = "T-3"\naccepted_by = "A Person"\non = "2026-11-01"\n', encoding="utf-8")
     return path
@@ -123,7 +123,7 @@ def test_a_control_mapped_to_evidence_nobody_produces_is_a_load_error(tmp_path):
     """Otherwise it reads as unmet forever while looking like a data problem."""
     path = tmp_path / "c.toml"
     path.write_text('version = "v"\nframework = "f"\nsource = "s"\n'
-                    '[[control]]\nid = "X"\nstatement = "s"\nfact = "nothing.produces.this"\n',
+                    '[[control]]\nid = "X"\nstatement = "s"\nfact = "nothing.produces.this"\nmaps_to = ["X-1"]\n',
                     encoding="utf-8")
     with pytest.raises(catalog_module.CatalogError) as refused:
         catalog_module.load(path)
@@ -133,7 +133,7 @@ def test_a_control_mapped_to_evidence_nobody_produces_is_a_load_error(tmp_path):
 def test_a_control_satisfied_two_ways_is_a_load_error(tmp_path):
     path = tmp_path / "c.toml"
     path.write_text('version = "v"\nframework = "f"\nsource = "s"\n'
-                    '[[control]]\nid = "X"\nstatement = "s"\nfact = "tests.all_passed"\n'
+                    '[[control]]\nid = "X"\nstatement = "s"\nfact = "tests.all_passed"\nmaps_to = ["X-1"]\n'
                     'gap = "also a gap"\n', encoding="utf-8")
     with pytest.raises(catalog_module.CatalogError):
         catalog_module.load(path)
@@ -142,7 +142,7 @@ def test_a_control_satisfied_two_ways_is_a_load_error(tmp_path):
 def test_an_attestation_that_never_expires_is_a_load_error(tmp_path):
     path = tmp_path / "c.toml"
     path.write_text('version = "v"\nframework = "f"\nsource = "s"\n'
-                    '[[control]]\nid = "X"\nstatement = "s"\nattestation = "a.toml"\n',
+                    '[[control]]\nid = "X"\nstatement = "s"\nattestation = "a.toml"\nmaps_to = ["X-1"]\n',
                     encoding="utf-8")
     with pytest.raises(catalog_module.CatalogError) as refused:
         catalog_module.load(path)
@@ -406,7 +406,7 @@ def security_catalog(tmp_path):
     path.write_text(
         'version = "test-1"\nframework = "test"\nsource = "written for this test"\n'
         '[[control]]\nid = "T-SE"\nstatement = "Image is clean."\n'
-        'fact = "security.image_free_of_fixable_vulnerabilities"\nblocking = true\n',
+        'fact = "security.image_free_of_fixable_vulnerabilities"\nunmapped_because = "x"\nblocking = true\n',
         encoding="utf-8")
     return path
 
@@ -594,3 +594,100 @@ def test_bundles_are_filed_under_the_day_they_were_filed(monkeypatch):
     store = sink.ObjectStore("b", prefix="assurance")
     key = store.key_for("run-1.abc.json", on=datetime(2026, 11, 16, tzinfo=timezone.utc))
     assert key == "assurance/2026/11/16/run-1.abc.json"
+
+
+# ------------------------------------------- the mapping, which is what an auditor checks
+
+def test_a_control_that_says_nothing_about_the_framework_is_refused(tmp_path):
+    """Silence about the mapping reads as mapped to whatever the reader assumes."""
+    path = tmp_path / "c.toml"
+    path.write_text('version = "v"\nframework = "f"\nsource = "s"\n'
+                    '[[control]]\nid = "X"\nstatement = "s"\nfact = "tests.all_passed"\n',
+                    encoding="utf-8")
+    with pytest.raises(catalog_module.CatalogError) as refused:
+        catalog_module.load(path)
+    assert "maps_to" in str(refused.value)
+
+
+def test_a_control_cannot_be_both_mapped_and_unmapped(tmp_path):
+    path = tmp_path / "c.toml"
+    path.write_text('version = "v"\nframework = "f"\nsource = "s"\n'
+                    '[[control]]\nid = "X"\nstatement = "s"\nfact = "tests.all_passed"\n'
+                    'maps_to = ["A-1"]\nunmapped_because = "also unmapped"\n', encoding="utf-8")
+    with pytest.raises(catalog_module.CatalogError):
+        catalog_module.load(path)
+
+
+def test_the_bundle_carries_the_mapping_with_the_result(evidence, trail_path, catalog):
+    built = build(evidence, trail_path, catalog)
+    mapped = next(e for e in built["controls"]["assessed"] if e["control"] == "T-1")
+    unmapped = next(e for e in built["controls"]["assessed"] if e["control"] == "T-2")
+
+    assert mapped["maps_to"] == ["X-1"]
+    assert mapped["unmapped_because"] == ""
+    assert unmapped["maps_to"] == []
+    assert unmapped["unmapped_because"] == "no clause"
+
+
+def test_the_shipped_catalog_is_honest_about_what_it_cannot_map():
+    """Some map, the rest say why. A catalog where everything maps is a catalog that is guessing."""
+    loaded = catalog_module.load(SHIPPED)
+    mapped = [c for c in loaded.controls if c.maps_to]
+    unmapped = [c for c in loaded.controls if not c.maps_to]
+
+    assert mapped, "nothing maps, which would make the mapping field decoration"
+    assert unmapped, "everything maps, which on this evidence would be a guess"
+    assert all(c.unmapped_because for c in unmapped)
+    assert all(len(c.unmapped_because) > 30 for c in unmapped), "a reason, not a shrug"
+
+
+# ----------------------------------------------- separation of duties, read off the record
+
+def gated(path, approver, requested_by=None):
+    evidence = {"image": "python@sha256:" + "a" * 64}
+    if requested_by:
+        evidence["requested_by"] = requested_by
+    trail.append("run-2", 1, "ship it", "deploy", "production", "human_gated",
+                 "needs a human", "executed", approver=approver, evidence=evidence, path=path)
+
+
+def duties(path):
+    return collect.facts("run-2", Path("."), path)["compliance.separation_of_duties"]
+
+
+def test_approving_your_own_request_fails_the_control_on_the_record(tmp_path):
+    """The runtime refuses this, so the only way it reaches the trail is a route that stopped
+    going through the gate. That is exactly the case worth catching here."""
+    path = tmp_path / "audit_trail.jsonl"
+    gated(path, approver="a.silva", requested_by="A.Silva ")
+
+    fact = duties(path)
+    assert fact.held is False
+    assert "approved their own request" in fact.detail
+
+
+def test_an_approval_with_nobody_recorded_as_asking_fails_the_control(tmp_path):
+    path = tmp_path / "audit_trail.jsonl"
+    gated(path, approver="r.okonkwo")
+
+    fact = duties(path)
+    assert fact.held is False
+    assert "nobody recorded" in fact.detail
+
+
+def test_two_different_people_hold_the_control(tmp_path):
+    path = tmp_path / "audit_trail.jsonl"
+    gated(path, approver="r.okonkwo", requested_by="a.silva")
+
+    fact = duties(path)
+    assert fact.held is True
+
+
+def test_a_run_with_no_human_in_it_has_no_separation_to_enforce(tmp_path):
+    path = tmp_path / "audit_trail.jsonl"
+    trail.append("run-2", 1, "read it", "read", "repository", "allow", "fine", "executed",
+                 path=path)
+
+    fact = duties(path)
+    assert fact.held is True
+    assert "no action in this run needed a human" in fact.detail

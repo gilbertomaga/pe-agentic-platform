@@ -10,6 +10,7 @@ from the plan file.
 
     agent  = "my-agent"
     prompt = "fix the failing test"
+    requested_by = "a.silva"
 
     [[actions]]
     verb    = "run"
@@ -90,6 +91,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         run = runner.execute(
             plan.get("prompt", ""), actions, scope=scope, workspace=workspace,
+            requested_by=plan.get("requested_by"),
             approvals=plan.get("approvals", {}),
         )
     except evaluate.PolicyUnavailable as err:

@@ -124,7 +124,8 @@ def test_a_gated_action_with_no_approver_never_reaches_the_sandbox(path, no_cont
 @needs_opa
 def test_a_gated_action_with_an_approver_runs_and_names_them(path, no_container, tmp_path):
     run = runner.execute("ship it", [DEPLOY], scope=SCOPE, workspace=tmp_path,
-                         trail_path=path, approvals={"deploy:production": "r.okonkwo"})
+                         trail_path=path, requested_by="a.silva",
+                         approvals={"deploy:production": "r.okonkwo"})
 
     assert run.stopped_because == "completed"
     assert all(e["approver"] == "r.okonkwo" for e in trail.read_all(path))
@@ -220,7 +221,8 @@ def test_a_gated_action_declared_at_provisioning_can_be_approved(path, no_contai
 
     scope = new_agent.load(workspace / "agent.toml")["actions"]
     run = runner.execute("ship it", [DEPLOY], scope=scope, workspace=tmp_path,
-                         trail_path=path, approvals={"deploy:production": "r.okonkwo"})
+                         trail_path=path, requested_by="a.silva",
+                         approvals={"deploy:production": "r.okonkwo"})
 
     assert run.stopped_because == "completed"
     assert run.executed[0].approver == "r.okonkwo"
@@ -312,3 +314,62 @@ def test_nothing_outside_the_runtime_calls_the_sandbox_directly():
             offenders.append(str(source.relative_to(REPO)))
 
     assert offenders == [], f"these call the sandbox without going through the runtime: {offenders}"
+
+
+# ---------------------------------------- the people around the action, not the action
+@needs_opa
+def test_nobody_approves_their_own_request(path, no_container, tmp_path):
+    """The oldest finding in any audit of any approval workflow, and it was claimed and not
+    enforced: the plan template said "nobody here approves their own" and nothing checked it."""
+    run = runner.execute("ship it", [DEPLOY], scope=SCOPE, workspace=tmp_path,
+                         trail_path=path, requested_by="a.silva",
+                         approvals={"deploy:production": "A.Silva"})
+
+    assert run.stopped_because == "refused"
+    assert no_container == [], "a non compliant action reached a container"
+
+    records = trail.read_all(path)
+    assert len(records) == 1, "a refusal is one record, not an allow followed by nothing"
+    assert records[0]["outcome"] == "non_compliant"
+    assert "segregation of duties" in records[0]["reason"]
+
+
+@needs_opa
+def test_a_gated_action_with_nobody_recorded_as_asking_is_refused(path, no_container, tmp_path):
+    """Not checkable is not the same as held, so it refuses rather than assuming."""
+    run = runner.execute("ship it", [DEPLOY], scope=SCOPE, workspace=tmp_path,
+                         trail_path=path, approvals={"deploy:production": "r.okonkwo"})
+
+    assert run.stopped_because == "refused"
+    assert no_container == []
+    assert trail.read_all(path)[0]["outcome"] == "non_compliant"
+
+
+@needs_opa
+def test_who_asked_is_inside_the_hash(path, no_container, tmp_path):
+    """The separation is worth nothing if the name of whoever asked can be edited afterwards.
+
+    It rides in `evidence` rather than in a field of its own, because the signed field set was
+    frozen after the last change to it broke every record written before. See D10 and D15.
+    """
+    runner.execute("ship it", [DEPLOY], scope=SCOPE, workspace=tmp_path,
+                   trail_path=path, requested_by="a.silva",
+                   approvals={"deploy:production": "r.okonkwo"})
+
+    executed = [e for e in trail.read_all(path) if e["event"] == "executed"]
+    assert executed[0]["evidence"]["requested_by"] == "a.silva"
+    assert trail.verify(path) == []
+
+    record = json.loads(path.read_text(encoding="utf-8").strip().splitlines()[-1])
+    record["evidence"]["requested_by"] = "r.okonkwo"
+    lines = path.read_text(encoding="utf-8").strip().splitlines()[:-1]
+    path.write_text("\n".join(lines + [json.dumps(record)]) + "\n", encoding="utf-8")
+
+    assert trail.verify(path), "the requester was rewritten and the chain did not notice"
+
+
+@needs_opa
+def test_an_autonomous_action_needs_no_requester(path, no_container, tmp_path):
+    """The control is about the human in the loop. Where there is none, there is nothing to ask."""
+    run = runner.execute("read it", [READ], scope=SCOPE, workspace=tmp_path, trail_path=path)
+    assert run.stopped_because == "completed"

@@ -29,6 +29,15 @@ at zero. If any test skipped, the gate says the run is not comparable instead of
 your machine. Nothing in it reads who made the change, so an agent's change meets the gate a
 person's change meets, and a structural test fails the build if that ever stops being true.
 
+**The client's compliance controls, in their own file.** `policy/compliance.rego` is a separate
+package from the platform's own guardrail, because it belongs to whoever the platform is deployed
+for: when their control set arrives it replaces a file rather than reaching into the runtime. It
+holds the controls that are about the people around an action rather than the action itself, and
+the first of them is separation of duties. The person approving is not the person who asked, both
+are named, and an action that cannot show the separation is refused rather than assumed. Every
+control in the catalog names either references into the client's framework or the reason it has
+none, and the catalog refuses to load on silence.
+
 **Security scanning that blocks, decided in one place.** The history is scanned for secrets and
 the image that runs is scanned for known vulnerabilities. Neither scanner decides: both report,
 and the control catalog reads the evidence, so the severity that stops a build is a reviewed line

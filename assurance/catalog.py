@@ -46,6 +46,10 @@ class Control:
     attestation: str | None = None
     valid_days: int = 0
     gap: str | None = None
+    #: References into the client's own framework. This is the thing an auditor checks, so it is
+    #: required, and a control that cannot be mapped has to say why rather than say nothing.
+    maps_to: tuple[str, ...] = ()
+    unmapped_because: str = ""
 
     @property
     def kind(self) -> str:
@@ -89,7 +93,18 @@ def load(path: Path = DEFAULT_CATALOG) -> Catalog:
             attestation=entry.get("attestation"),
             valid_days=int(entry.get("valid_days", 0)),
             gap=entry.get("gap"),
+            maps_to=tuple(entry.get("maps_to", ())),
+            unmapped_because=str(entry.get("unmapped_because", "")),
         )
+
+        # The mapping is the thing an auditor reads, so silence about it is not allowed. A
+        # control with no reference and no stated reason reads as mapped to whatever the person
+        # reading it assumes, which is the failure this field exists to prevent.
+        if bool(control.maps_to) == bool(control.unmapped_because):
+            raise CatalogError(
+                f"{control.id} must name either `maps_to`, with references into the client's "
+                "framework, or `unmapped_because`, with the reason there are none. Not both and "
+                "not neither: an unmapped control is a real state and a silent one is not.")
 
         named = [x for x in (control.fact, control.attestation, control.gap) if x]
         if len(named) != 1:

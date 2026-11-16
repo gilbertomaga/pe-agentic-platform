@@ -113,6 +113,7 @@ def execute(
     workspace: Path,
     run_id: str | None = None,
     approvals: dict[str, str] | None = None,
+    requested_by: str | None = None,
     image: str | None = None,
     max_steps: int = DEFAULT_MAX_STEPS,
     trail_path: Path = trail.DEFAULT_TRAIL,
@@ -134,7 +135,14 @@ def execute(
     # platform cannot say what it is about to run, and raising here is the same reflex as failing
     # closed on an unreachable policy engine: a run nobody can describe should not start.
     image = supply.require_digest(image or supply.sandbox_image())
+
+    # `requested_by` rides in the evidence rather than in a field of its own. The signed field
+    # set was frozen after the last change broke every record written before it, and evidence is
+    # already inside the hash, which is the property that matters: the separation of duties
+    # control is worth nothing if the name of whoever asked can be edited afterwards. See D10.
     ran_on = {"image": image, "image_digest": supply.digest_of(image)}
+    if requested_by:
+        ran_on["requested_by"] = requested_by
 
     def record(step: int, action: Action, outcome: str, reason: str, event: str,
                approver: str | None = None, evidence: dict | None = None) -> None:
@@ -157,9 +165,26 @@ def execute(
         decision = evaluate.decide(action.verb, action.target)
         outcome, reason = decision["outcome"], decision["reason"]
 
-        # 3. The decision is recorded before anything happens.
+        # 3. The client's compliance controls, on the people rather than on the action. Asked
+        #    before the decision is recorded, so a refusal is recorded as the refusal it is
+        #    rather than as an allow that happened not to run.
+        #    Only once there is an approver to check. A gated action still waiting for one halts
+        #    below with `needs_approval` and no alert, because that is the gate working rather
+        #    than somebody trying to get around it, and paging for it is how a channel dies.
         approver = approvals.get(action.name) if outcome == "human_gated" else None
-        record(index, action, outcome, reason, "decided", approver=approver)
+        if outcome == "human_gated" and approver:
+            control = evaluate.comply(outcome, action.verb, action.target,
+                                      requested_by, approver)
+            if control["outcome"] == "refuse":
+                detail = f"{control['control']}: {control['reason']}"
+                record(index, action, "non_compliant", detail, "decided",
+                       approver=approver, evidence=ran_on)
+                alert.raise_alert(run_id, index, action.name, "non_compliant", detail)
+                steps.append(Step(index, action.name, "non_compliant", detail, executed=False))
+                return Run(run_id, tuple(steps), "refused")
+
+        # 4. The decision is recorded before anything happens.
+        record(index, action, outcome, reason, "decided", approver=approver, evidence=ran_on)
 
         if outcome not in ("allow", "human_gated"):
             # Blocked and recorded above. The alert is what reaches someone who was not looking.

@@ -5,7 +5,8 @@ Agent runtime, policy layer, audit trail and golden path. Python, Docker, OPA.
 ## Layout
 
 - `runtime/` sandbox lifecycle, the runner that joins the three, and alerting
-- `policy/` OPA policies and the evaluation entry point
+- `policy/` the platform's guardrail (`agent.rego`) and the client's controls
+  (`compliance.rego`), in separate packages because they have different owners
 - `trail/` append only JSONL writer and the audit gate
 - `golden_path/` provisioning, and the adoption census
 - `supply/` what the platform runs, pinned by content: `pinned.toml` is the only source of truth
@@ -52,4 +53,8 @@ Agent runtime, policy layer, audit trail and golden path. Python, Docker, OPA.
 - A finding is carried by naming it in `assurance/exceptions.toml`, with a reason, a person and
   an expiry. Never by relaxing a control or a threshold. The state is `excepted`, never `held`,
   and a committed secret can never be excepted. See D14.
+- Every control in `assurance/controls.toml` names either `maps_to` or
+  `unmapped_because`. Silence about the mapping is refused at load. See D15.
+- `policy/compliance.rego` is the client's, not ours. It is replaced wholesale when
+  their control set changes, so nothing in the runtime may depend on its contents.
 - Nothing in here may modify `policy/`.

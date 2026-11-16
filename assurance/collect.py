@@ -48,6 +48,7 @@ PRODUCES = (
     "trail.chain_intact",
     "trail.no_unnamed_approvals",
     "trail.run_recorded",
+    "compliance.separation_of_duties",
     "tests.all_passed",
     "tests.containment_exercised",
     "quality.no_new_untested_code",
@@ -190,10 +191,40 @@ def _trail(run_id: str, trail_path: Path) -> dict[str, Fact]:
     }
 
 
+def _compliance(run_id: str, trail_path: Path) -> dict[str, Fact]:
+    """Read the separation back off the record, rather than trusting that the gate ran.
+
+    The runtime refuses an action whose approver is its requester, so in the normal case this
+    can only ever confirm. That is the point: a control is evidenced by the record it left, and
+    a record written by an older runtime, or by any route that stopped going through the gate,
+    fails here instead of being assumed clean.
+    """
+    gated = [e for e in trail.find(run_id, trail_path) if e.get("approver")]
+    if not gated:
+        return {"compliance.separation_of_duties": Fact(
+            True, "no action in this run needed a human, so there was no separation to enforce")}
+
+    breaches = []
+    for entry in gated:
+        asked = ((entry.get("evidence") or {}).get("requested_by") or "").strip().lower()
+        approved = (entry.get("approver") or "").strip().lower()
+        if not asked:
+            breaches.append(f"record {entry['seq']}: approved by {approved}, nobody recorded "
+                            "as having requested it")
+        elif asked == approved:
+            breaches.append(f"record {entry['seq']}: {approved} approved their own request")
+
+    return {"compliance.separation_of_duties": Fact(
+        not breaches,
+        f"{len(gated)} gated actions, each requested and approved by different named people"
+        if not breaches else "; ".join(breaches[:5]))}
+
+
 def facts(run_id: str, evidence_dir: Path, trail_path: Path) -> dict[str, Fact]:
     """Every fact the platform can state about one run, keyed exactly as `PRODUCES`."""
     found = {}
     found.update(_trail(run_id, trail_path))
+    found.update(_compliance(run_id, trail_path))
     found.update(_tests(_read(evidence_dir / "tests.json")))
     found.update(_quality(_read(evidence_dir / "quality.json")))
     found.update(_security(_read(evidence_dir / "security.json")))
