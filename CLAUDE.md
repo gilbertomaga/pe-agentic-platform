@@ -10,6 +10,7 @@ Agent runtime, policy layer, audit trail and golden path. Python, Docker, OPA.
 - `golden_path/` provisioning, and the adoption census
 - `supply/` what the platform runs, pinned by content: `pinned.toml` is the only source of truth
 - `quality/` the coverage gate and `baseline.toml`, the bar a change is held to
+- scanners live in CI only: they report, and `assurance/controls.toml` decides what blocks
 - `assurance/` the control catalog, the bundle assembled per run, and the sink that files it
 - `docs/decisions.md` decision log, read this before changing behaviour
 
@@ -44,4 +45,8 @@ Agent runtime, policy layer, audit trail and golden path. Python, Docker, OPA.
   human change meets, and a structural test reads the workflows for `github.actor` and friends.
 - `quality/baseline.toml` only goes down. Raising a number belongs in the same commit as the
   reason, and the gate never rewrites it on its own. See D12.
+- Every binary the build downloads is checked against a pinned checksum. There is a test that
+  counts downloads against checks across all workflows. See D10 and D13.
+- A scanner's raw output stays on the runner. Only derived counts, rule names and paths reach
+  the evidence directory, because a secret scanner's findings are the secrets. See D13.
 - Nothing in here may modify `policy/`.

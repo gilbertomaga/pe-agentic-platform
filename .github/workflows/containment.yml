@@ -23,7 +23,11 @@ jobs:
   containment:
     runs-on: ubuntu-latest
     steps:
+      # The whole history, because the secret scan reads every commit. A secret is removed from
+      # the tip and stays in the history, which is where anybody looking for one would look.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
@@ -36,10 +40,11 @@ jobs:
         run: |
           python - >> "$GITHUB_OUTPUT" <<'PY'
           from supply import verify
-          opa = verify.opa()
           print("image=" + verify.sandbox_image())
-          print("opa_url=" + opa["url"])
-          print("opa_sha256=" + opa["sha256"])
+          for name in ("opa", "trivy", "gitleaks"):
+              pin = getattr(verify, name)()
+              print(f"{name}_url=" + pin["url"])
+              print(f"{name}_sha256=" + pin["sha256"])
           PY
 
       - name: Install pytest
@@ -61,6 +66,45 @@ jobs:
           chmod +x opa
           sudo mv opa /usr/local/bin/opa
           opa version
+
+      # Both scanners are pinned and checked for the same reason the policy engine is. A
+      # scanner that did not run reports nothing, and nothing is what a clean result looks like.
+      - name: Install the scanners, and check they are the binaries that were pinned
+        run: |
+          curl -sSL -o trivy.tgz '${{ steps.pin.outputs.trivy_url }}'
+          echo '${{ steps.pin.outputs.trivy_sha256 }}  trivy.tgz' | sha256sum -c -
+          tar -xzf trivy.tgz trivy && sudo mv trivy /usr/local/bin/trivy
+
+          curl -sSL -o gitleaks.tgz '${{ steps.pin.outputs.gitleaks_url }}'
+          echo '${{ steps.pin.outputs.gitleaks_sha256 }}  gitleaks.tgz' | sha256sum -c -
+          tar -xzf gitleaks.tgz gitleaks && sudo mv gitleaks /usr/local/bin/gitleaks
+
+          trivy --version | head -1
+          gitleaks version
+
+      # Both scanners report rather than decide, and the raw output stays on this runner. What
+      # blocks the change is the control catalog reading the derived evidence, so the severity
+      # that blocks is a reviewed line in a control rather than a flag buried in a YAML
+      # argument, and one place enforces every control instead of several.
+      #
+      # The raw reports are deliberately not in evidence/ and so are not uploaded. A secret
+      # scanner's findings are the secrets; filing those in an immutable evidence store is
+      # making a second and more durable copy of the leak.
+      - name: Scan the history for secrets
+        if: always()
+        run: |
+          mkdir -p scans
+          gitleaks git --no-banner --redact --exit-code 0 \
+            --report-format json --report-path scans/gitleaks.json .
+
+      - name: Scan the image that runs for known vulnerabilities
+        if: always()
+        run: |
+          mkdir -p scans
+          trivy image --quiet --scanners vuln \
+            --severity HIGH,CRITICAL --exit-code 0 \
+            --format json --output scans/trivy.json \
+            '${{ steps.pin.outputs.image }}'
 
       # An SBOM of the image the sandbox actually runs, not of a tag that resolved to it once.
       # It is evidence rather than a gate: it answers "what was in the thing that ran" after the
@@ -119,6 +163,9 @@ jobs:
           python -m assurance.collect tests --junit evidence/junit.xml --out evidence/tests.json
           python -m assurance.collect supply \
             --sbom sbom-sandbox-image.cdx.json --out evidence/supply.json
+          python -m assurance.collect security \
+            --secrets scans/gitleaks.json --image scans/trivy.json \
+            --target '${{ steps.pin.outputs.image }}' --out evidence/security.json
 
       # The bundle is assembled even when the change failed, and it says which control failed.
       # An evidence store that only ever receives passes is a marketing database with an audit

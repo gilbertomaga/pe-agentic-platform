@@ -96,6 +96,24 @@ def test_nothing_in_the_repository_names_the_sandbox_image_by_tag():
     assert offenders == [], f"these name the image by tag rather than by digest: {offenders}"
 
 
+def test_the_scanners_are_pinned_and_checksummed_like_the_policy_engine():
+    """A scanner that did not run reports nothing, and nothing is what clean looks like."""
+    for pin in (supply.trivy(), supply.gitleaks()):
+        assert pin["version"].startswith("v")
+        assert HEX64.match(pin["sha256"])
+        assert pin["url"].startswith(f"https://github.com/{pin['repository']}/releases/download/")
+        assert pin["version"] in pin["url"] and pin["asset"] in pin["url"]
+
+
+def test_a_tool_missing_its_repository_or_checksum_stops(tmp_path):
+    """Fail closed here too: an unpinned scanner is a scanner somebody else chose."""
+    partial = tmp_path / "pinned.toml"
+    partial.write_text('[trivy]\nversion = "v1.0.0"\n', encoding="utf-8")
+    with pytest.raises(supply.Unpinned) as refused:
+        supply.trivy(partial)
+    assert "trivy" in str(refused.value)
+
+
 def test_the_evidence_store_emulator_is_pinned_too():
     """A test fixture is still a container pulled onto a runner that is holding a token."""
     reference = supply.evidence_store_emulator()
@@ -114,6 +132,23 @@ def test_every_container_the_build_starts_comes_from_the_pin():
                 if "steps.pin.outputs" not in text[found:found + 200]:
                     offenders.append(f"{workflow.name}: {verb} not from the pin")
                 start = found + 1
+    assert offenders == [], offenders
+
+
+def test_every_binary_the_build_downloads_is_checked_against_a_pin():
+    """Structural, and broader than the one below on purpose.
+
+    The policy engine was the first thing fetched unverified and it will not be the last. Any
+    file the build pulls down and then executes is a decision somebody else gets to make, so the
+    count of downloads and the count of checksum checks have to match.
+    """
+    offenders = []
+    for workflow in (REPO / ".github" / "workflows").glob("*.yml"):
+        text = workflow.read_text(encoding="utf-8")
+        downloads = text.count("curl -sSL -o")
+        checked = text.count("sha256sum -c")
+        if downloads != checked:
+            offenders.append(f"{workflow.name}: {downloads} downloads, {checked} checksum checks")
     assert offenders == [], offenders
 
 

@@ -29,6 +29,15 @@ at zero. If any test skipped, the gate says the run is not comparable instead of
 your machine. Nothing in it reads who made the change, so an agent's change meets the gate a
 person's change meets, and a structural test fails the build if that ever stops being true.
 
+**Security scanning that blocks, decided in one place.** The history is scanned for secrets and
+the image that runs is scanned for known vulnerabilities. Neither scanner decides: both report,
+and the control catalog reads the evidence, so the severity that stops a build is a reviewed line
+in a control rather than a flag in a YAML argument. The image gate blocks on findings with a fix
+available and counts the ones without, because a build cannot act on a vulnerability with no
+patch. Both scanners are pinned by checksum for the same reason the policy engine is: a scanner
+that did not run reports nothing, and nothing is what a clean result looks like. The raw reports
+never leave the runner, because a secret scanner's findings are the secrets.
+
 **An assurance bundle the build hands over.** Every run assembles one: the traceability projected
 into a shape other consumers can read, the test and supply chain evidence the pipeline produced,
 and every control in the client's catalog with its state and the evidence behind it. It is

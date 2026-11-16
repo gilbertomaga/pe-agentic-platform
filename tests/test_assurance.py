@@ -59,6 +59,13 @@ def evidence(tmp_path):
         {"held": True, "comparable": True, "uncovered": 250, "statements": 1000,
          "baseline": 256, "baseline_recorded_on": "2026-11-16", "breaches": [],
          "tests_not_run": []}), encoding="utf-8")
+    (directory / "security.json").write_text(json.dumps(
+        {"secrets": {"scanner": "gitleaks", "scanned": "history", "findings": 0,
+                     "rules": [], "paths": []},
+         "image_vulnerabilities": {"scanner": "trivy", "target": "python@sha256:aaa",
+                                   "severities": "HIGH,CRITICAL", "total": 4,
+                                   "fixable": 0, "unfixable": 4, "fixable_ids": []}}),
+        encoding="utf-8")
     (directory / "supply.json").write_text(json.dumps(
         {"image": "python@sha256:" + "a" * 64,
          "policy_engine_verified": True,
@@ -269,6 +276,125 @@ def test_a_failed_coverage_gate_names_what_breached(evidence, trail_path, catalo
     fact = built["evidence"]["quality.no_new_untested_code"]
     assert fact["state"] == "not_held"
     assert "quality/gate.py" in fact["detail"]
+
+
+def test_a_clean_pair_of_scans_holds_both_security_controls(evidence, trail_path, catalog):
+    built = build(evidence, trail_path, catalog)
+    assert built["evidence"]["security.no_committed_secrets"]["state"] == "held"
+    assert built["evidence"]["security.image_free_of_fixable_vulnerabilities"]["state"] == "held"
+
+
+def test_an_image_vulnerability_with_a_fix_available_is_not_held(
+        evidence, trail_path, catalog):
+    """A finding nobody can act on is a different thing from one somebody can."""
+    (evidence / "security.json").write_text(json.dumps(
+        {"image_vulnerabilities": {"scanner": "trivy", "target": "x", "total": 5,
+                                   "fixable": 1, "unfixable": 4,
+                                   "fixable_ids": ["CVE-2026-1"]}}), encoding="utf-8")
+    built = build(evidence, trail_path, catalog)
+    assert built["evidence"]["security.image_free_of_fixable_vulnerabilities"]["state"] \
+        == "not_held"
+
+
+def test_scanners_that_did_not_run_are_not_a_clean_scan(evidence, trail_path, catalog):
+    (evidence / "security.json").unlink()
+    built = build(evidence, trail_path, catalog)
+    for key in ("security.no_committed_secrets",
+                "security.image_free_of_fixable_vulnerabilities"):
+        assert built["evidence"][key]["state"] == "not_evidenced"
+
+
+def test_the_bundle_never_carries_the_secrets_the_scanner_found(tmp_path, trail_path, catalog):
+    """An evidence store holds this for a year. A leak copied into it is a worse leak."""
+    leaked = "AKIAIOSFODNN7EXAMPLE"
+    report = tmp_path / "gitleaks.json"
+    report.write_text(json.dumps([{"RuleID": "aws-access-token", "File": "deploy/run.sh",
+                                   "Secret": leaked, "Match": f"key={leaked}"}]),
+                      encoding="utf-8")
+
+    evidence_dir = tmp_path / "evidence"
+    evidence_dir.mkdir()
+    written = collect.security_evidence(report, None)
+    (evidence_dir / "security.json").write_text(json.dumps(written), encoding="utf-8")
+
+    built = build(evidence_dir, trail_path, catalog)
+    assert leaked not in bundle_module.canonical(built).decode("utf-8")
+    assert leaked not in json.dumps(written)
+    assert written["secrets"]["findings"] == 1
+    assert written["secrets"]["rules"] == ["aws-access-token"]
+    assert written["secrets"]["paths"] == ["deploy/run.sh"]
+
+
+def test_an_image_report_is_split_into_what_can_be_fixed_and_what_cannot(tmp_path):
+    """The gate acts on one of those two numbers and the bundle carries both."""
+    report = tmp_path / "trivy.json"
+    report.write_text(json.dumps({"ArtifactName": "python@sha256:abc", "Results": [
+        {"Target": "python", "Vulnerabilities": [
+            {"VulnerabilityID": "CVE-2026-1", "Severity": "HIGH", "FixedVersion": "1.2.3"},
+            {"VulnerabilityID": "CVE-2026-2", "Severity": "CRITICAL"},
+            {"VulnerabilityID": "CVE-2026-3", "Severity": "HIGH", "FixedVersion": ""},
+        ]},
+        {"Target": "no vulnerabilities key"},
+    ]}), encoding="utf-8")
+
+    written = collect.security_evidence(None, report)["image_vulnerabilities"]
+    assert written["total"] == 3
+    assert written["fixable"] == 1
+    assert written["unfixable"] == 2
+    assert written["fixable_ids"] == ["CVE-2026-1"]
+    assert written["target"] == "python@sha256:abc"
+
+
+def test_scanners_that_wrote_nothing_produce_no_evidence_rather_than_zeroes(tmp_path):
+    """Absent is not clean, and the difference has to survive this far."""
+    assert collect.security_evidence(tmp_path / "nope.json", tmp_path / "also-nope.json") == {}
+
+
+def test_an_empty_secret_report_reads_as_nothing_found(tmp_path):
+    report = tmp_path / "gitleaks.json"
+    report.write_text("", encoding="utf-8")
+    assert collect.security_evidence(report, None)["secrets"]["findings"] == 0
+
+
+def test_the_collector_writes_what_the_pipeline_asks_it_for(tmp_path):
+    """These three run in CI and nothing asserted them, which is its own kind of untested."""
+    junit = tmp_path / "junit.xml"
+    junit.write_text(
+        '<testsuite tests="3" failures="0" errors="0" skipped="1">'
+        '<testcase classname="tests.test_a" name="one"/>'
+        '<testcase classname="tests.test_a" name="two"/>'
+        '<testcase classname="tests.test_sandbox" name="network"><skipped/></testcase>'
+        "</testsuite>", encoding="utf-8")
+
+    out = tmp_path / "tests.json"
+    assert collect.main(["tests", "--junit", str(junit), "--out", str(out)]) == 0
+    written = json.loads(out.read_text(encoding="utf-8"))
+    assert written == {"passed": 2, "failed": 0, "errors": 0, "skipped": 1,
+                       "containment_exercised": False,
+                       "containment_tests_skipped": ["network"]}
+
+    report = tmp_path / "gitleaks.json"
+    report.write_text("[]", encoding="utf-8")
+    scans = tmp_path / "security.json"
+    assert collect.main(["security", "--secrets", str(report), "--out", str(scans)]) == 0
+    assert json.loads(scans.read_text(encoding="utf-8"))["secrets"]["findings"] == 0
+
+    chain = tmp_path / "supply.json"
+    assert collect.main(["supply", "--out", str(chain)]) == 0
+    recorded = json.loads(chain.read_text(encoding="utf-8"))
+    assert "@sha256:" in recorded["image"]
+    assert "policy_engine_detail" in recorded
+
+
+def test_the_bill_of_materials_is_read_from_the_file_the_build_produced(tmp_path):
+    sbom = tmp_path / "sbom.cdx.json"
+    sbom.write_text(json.dumps({"bomFormat": "CycloneDX",
+                                "components": [{"name": "a"}, {"name": "b"}]}),
+                    encoding="utf-8")
+    written = collect.supply_evidence(sbom)["bill_of_materials"]
+    assert written["components"] == 2
+    assert written["format"] == "CycloneDX-json"
+    assert len(written["sha256"]) == 64
 
 
 def test_the_fact_keys_are_exactly_what_the_catalog_may_name(evidence, trail_path):

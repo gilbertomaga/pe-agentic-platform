@@ -78,6 +78,20 @@ statement = "The contents of what executes are disclosed in a machine readable b
 fact = "supply.bill_of_materials"
 blocking = false
 
+# ------------------------------------------------- security, scanned on every change
+
+[[control]]
+id = "DEMO-SE-01"
+statement = "Source is scanned for committed secrets across the repository's whole history, and a finding blocks."
+fact = "security.no_committed_secrets"
+blocking = true
+
+[[control]]
+id = "DEMO-SE-02"
+statement = "The image that executes is scanned for known vulnerabilities, and a finding with a fix available blocks."
+fact = "security.image_free_of_fixable_vulnerabilities"
+blocking = true
+
 # ------------------------------------------------------------- needs a human
 
 [[control]]
@@ -96,7 +110,7 @@ gap = "The base image is not signed by any publisher identity this platform can 
 blocking = false
 
 [[control]]
-id = "DEMO-SE-01"
-statement = "Source is scanned for committed secrets before it ships, and a finding blocks."
-gap = "No secret scanning runs on this repository. The control is real and the gap is open; it is the next piece of Module 4 Component 2 to land here rather than something this platform has decided not to do."
+id = "DEMO-SE-03"
+statement = "A vulnerability with no fix available is tracked to a decision rather than carried silently."
+gap = "The image gate blocks on fixable findings only, because a build cannot act on a vulnerability with no patch. The unfixable ones are counted in every bundle and nothing yet routes them to a person. That is the honest shape of the gap: visible, not handled. See docs/decisions.md D13."
 blocking = false

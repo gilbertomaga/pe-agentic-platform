@@ -51,6 +51,8 @@ PRODUCES = (
     "supply.image_pinned",
     "supply.policy_engine_verified",
     "supply.bill_of_materials",
+    "security.no_committed_secrets",
+    "security.image_free_of_fixable_vulnerabilities",
 )
 
 
@@ -131,6 +133,36 @@ def _supply(evidence: dict | None) -> dict[str, Fact]:
     }
 
 
+def _security(evidence: dict | None) -> dict[str, Fact]:
+    if evidence is None:
+        missing = Fact(None, "no security.json in the evidence directory; the scanners did not "
+                             "run, which is not the same finding as a clean scan")
+        return {"security.no_committed_secrets": missing,
+                "security.image_free_of_fixable_vulnerabilities": missing}
+
+    secrets = evidence.get("secrets") or {}
+    image = evidence.get("image_vulnerabilities") or {}
+    found = secrets.get("findings")
+    fixable = image.get("fixable")
+
+    return {
+        # The detail names rules and paths and never a secret. An evidence bundle that carries
+        # what the scanner found is a second copy of the leak, filed somewhere immutable.
+        "security.no_committed_secrets": Fact(
+            found == 0 if found is not None else None,
+            f"{secrets.get('scanner', 'scanner')} found nothing in {secrets.get('scanned', '?')}"
+            if found == 0 else
+            f"{found} findings: {', '.join(secrets.get('rules', [])[:5])}"
+            if found else "the secret scan did not report"),
+        "security.image_free_of_fixable_vulnerabilities": Fact(
+            fixable == 0 if fixable is not None else None,
+            f"{image.get('scanner', 'scanner')} on {image.get('target', '?')}: "
+            f"{fixable} fixable at {image.get('severities', 'HIGH,CRITICAL')}, "
+            f"{image.get('unfixable', '?')} with no fix available"
+            if fixable is not None else "the image scan did not report"),
+    }
+
+
 def _trail(run_id: str, trail_path: Path) -> dict[str, Fact]:
     records = trail.find(run_id, trail_path)
     faults = trail.verify(trail_path)
@@ -157,6 +189,7 @@ def facts(run_id: str, evidence_dir: Path, trail_path: Path) -> dict[str, Fact]:
     found.update(_trail(run_id, trail_path))
     found.update(_tests(_read(evidence_dir / "tests.json")))
     found.update(_quality(_read(evidence_dir / "quality.json")))
+    found.update(_security(_read(evidence_dir / "security.json")))
     found.update(_supply(_read(evidence_dir / "supply.json")))
 
     # The contract this module publishes is the key set, so it is checked rather than trusted.
@@ -236,6 +269,45 @@ def supply_evidence(sbom: Path | None = None) -> dict:
     return evidence
 
 
+def security_evidence(secrets: Path | None, image: Path | None, target: str = "",
+                      severities: str = "HIGH,CRITICAL") -> dict:
+    """Scanner output turned into evidence, with the findings themselves left behind.
+
+    A secret scanner's report contains the secrets. Copying that into an assurance bundle, which
+    is then filed somewhere nobody can delete it for a year, is making a second and more durable
+    copy of the leak. So what travels is the count, the rule names and the paths.
+    """
+    evidence: dict = {}
+
+    if secrets is not None and secrets.exists():
+        text = secrets.read_text(encoding="utf-8").strip()
+        findings = json.loads(text) if text else []
+        evidence["secrets"] = {
+            "scanner": "gitleaks",
+            "scanned": "working tree and history",
+            "findings": len(findings),
+            "rules": sorted({f.get("RuleID", "?") for f in findings}),
+            "paths": sorted({f.get("File", "?") for f in findings})[:20],
+        }
+
+    if image is not None and image.exists():
+        report = json.loads(image.read_text(encoding="utf-8"))
+        vulnerabilities = [v for result in (report.get("Results") or [])
+                           for v in (result.get("Vulnerabilities") or [])]
+        fixable = [v for v in vulnerabilities if v.get("FixedVersion")]
+        evidence["image_vulnerabilities"] = {
+            "scanner": "trivy",
+            "target": target or report.get("ArtifactName", "?"),
+            "severities": severities,
+            "total": len(vulnerabilities),
+            "fixable": len(fixable),
+            "unfixable": len(vulnerabilities) - len(fixable),
+            # Named, because "three fixable highs" is a number and these are the work.
+            "fixable_ids": sorted({v.get("VulnerabilityID", "?") for v in fixable})[:20],
+        }
+    return evidence
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Write one evidence file for the bundle.")
     sub = parser.add_subparsers(dest="what", required=True)
@@ -248,8 +320,19 @@ def main(argv: list[str] | None = None) -> int:
     chain.add_argument("--sbom", type=Path, default=None)
     chain.add_argument("--out", type=Path, required=True)
 
+    scans = sub.add_parser("security", help="read the scanners' reports, without their findings")
+    scans.add_argument("--secrets", type=Path, default=None)
+    scans.add_argument("--image", type=Path, default=None)
+    scans.add_argument("--target", default="")
+    scans.add_argument("--out", type=Path, required=True)
+
     args = parser.parse_args(argv)
-    written = from_junit(args.junit) if args.what == "tests" else supply_evidence(args.sbom)
+    if args.what == "tests":
+        written = from_junit(args.junit)
+    elif args.what == "supply":
+        written = supply_evidence(args.sbom)
+    else:
+        written = security_evidence(args.secrets, args.image, args.target)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(written, indent=2, sort_keys=True), encoding="utf-8")

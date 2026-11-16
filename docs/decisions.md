@@ -467,3 +467,63 @@ platform, and the reason is cost rather than principle: it is minutes per run wh
 seconds. Naming it is better than implying the gate measures something it does not. The gate also
 reads JaCoCo as well as coverage.py, because the delivery platform underneath this one is mostly
 Java, and a quality gate that understands half an estate is an argument for a second gate.
+
+
+## D13 · Scanners report, the catalog decides
+
+**2026-11-16 · security, supply chain, assurance, CI**
+
+Two scans were missing and both are the kind whose absence is invisible. Nothing looked for
+secrets in the history, and nothing looked at what was in the image the sandbox runs, which the
+SBOM described without ever asking whether any of it was known to be vulnerable. A repository
+with no secret scanner and a repository with no secrets look identical from outside.
+
+**The scanners do not decide.** Both run with their exit code forced to zero and write a report.
+What blocks the change is the control catalog reading the evidence derived from that report. So
+the severity that stops a build is a line in a control somebody reviewed, not a flag buried in a
+YAML argument where changing it reads as a formatting commit, and one place enforces every
+control rather than each scanner enforcing its own.
+
+It costs something, and the cost is honest to name: feedback arrives at the assurance step
+rather than the moment the scanner finishes. On a build this size that is seconds. On a long
+pipeline it would be worth failing fast as well, and the catalog would still be where the
+threshold lives.
+
+**Fixable and unfixable are different findings.** The image gate blocks on vulnerabilities that
+have a fix available and not on the ones that do not, because a build cannot act on a
+vulnerability with no patch, and a gate that stops everybody for something nobody can fix is a
+gate that gets an exception written for it in a fortnight. The unfixable ones are counted in
+every bundle so the number is visible rather than quietly dropped by an `--ignore-unfixed` flag.
+
+That leaves a real gap and it is declared as one rather than rounded off. Nothing routes an
+unfixable finding to a person, so today it is visible and unhandled. Visible and unhandled is
+worth writing down; it is the state that turns into a surprise when somebody finally reads the
+count.
+
+**The scanners are pinned and checksummed, like the policy engine.** This is the same lesson as
+D10 and it generalises past the thing that taught it: every tool the build downloads and then
+trusts is a tool whose silence looks like good news. A substituted policy engine allows
+everything, a scanner that did not run reports nothing, and a secret scanner that failed finds no
+secrets. All three produce a green build. The structural test now counts downloads against
+checksum checks across every workflow rather than naming the one tool that once got this wrong.
+
+The vulnerability scanner publishes a sigstore bundle beside its checksums, which is a real
+publisher identity and more than the base image offers. Verifying it needs cosign and is the step
+up from here. The checksum is what is claimed today.
+
+**The raw reports stay on the runner.** A secret scanner's findings are the secrets. Copying them
+into an assurance bundle, which is then filed in a store where nobody can delete it for a year,
+is making a second and more durable copy of the leak in the one place designed to keep things
+forever. What travels is the count, the rule names and the paths. There is a test that puts a
+credential-shaped string through the whole chain and fails if it appears anywhere in the bundle.
+
+**The history, not the tip.** The secret scan reads every commit, which is why the build now
+checks out the full history. A secret removed in a later commit is still in the repository, and
+the history is where somebody looking for one would look.
+
+**What is still not covered, named rather than implied.** There is no dynamic testing, because
+there is no running environment to point it at; this platform is a runtime and a set of
+libraries, not a service. There is no dependency scan, because there are no third party runtime
+dependencies to scan: that is a property of this codebase rather than a control this platform
+provides, and claiming the control would be claiming credit for the absence of the risk. Signing
+and provenance remain where D10 left them.

@@ -96,17 +96,37 @@ def digest_of(reference: str) -> str:
     return require_digest(reference).split("@", 1)[1]
 
 
-def opa(path: Path = PINNED) -> dict:
-    """The policy engine the build is allowed to install: version, asset, checksum and URL."""
-    pin = _load(path).get("opa", {})
-    for field in ("version", "asset", "sha256"):
+def _release_tool(section: str, path: Path = PINNED) -> dict:
+    """A tool the build downloads and then trusts: version, asset, checksum and URL.
+
+    Every one of these is a thing whose silence looks like good news. A policy engine that was
+    swapped allows everything, a vulnerability scanner that did not run reports nothing, and a
+    secret scanner that failed finds no secrets. All three produce a green build, so all three
+    are pinned by content and verified before use.
+    """
+    pin = _load(path).get(section, {})
+    for field in ("repository", "version", "asset", "sha256"):
         if not pin.get(field):
-            raise Unpinned(f"{path} has no pinned OPA {field}")
+            raise Unpinned(f"{path} has no pinned {section} {field}")
     pin = dict(pin)
-    pin["url"] = (
-        "https://github.com/open-policy-agent/opa/releases/download/"
-        f"{pin['version']}/{pin['asset']}")
+    pin["url"] = (f"https://github.com/{pin['repository']}/releases/download/"
+                  f"{pin['version']}/{pin['asset']}")
     return pin
+
+
+def opa(path: Path = PINNED) -> dict:
+    """The policy engine the build is allowed to install."""
+    return _release_tool("opa", path)
+
+
+def trivy(path: Path = PINNED) -> dict:
+    """The image vulnerability scanner the build is allowed to install."""
+    return _release_tool("trivy", path)
+
+
+def gitleaks(path: Path = PINNED) -> dict:
+    """The secret scanner the build is allowed to install."""
+    return _release_tool("gitleaks", path)
 
 
 def sha256_of(path: Path) -> str:
