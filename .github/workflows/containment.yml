@@ -87,9 +87,10 @@ jobs:
       # that blocks is a reviewed line in a control rather than a flag buried in a YAML
       # argument, and one place enforces every control instead of several.
       #
-      # The raw reports are deliberately not in evidence/ and so are not uploaded. A secret
-      # scanner's findings are the secrets; filing those in an immutable evidence store is
-      # making a second and more durable copy of the leak.
+      # The two raw reports are treated differently on purpose. The secret scanner's findings
+      # are the secrets, so that report never leaves this runner. The vulnerability report is
+      # the work list, so it is kept with the build: a count tells somebody there is a problem
+      # and the report tells them which package, which is the part anyone can act on.
       - name: Scan the history for secrets
         if: always()
         run: |
@@ -187,6 +188,7 @@ jobs:
           path: |
             bundles/
             evidence/
+            scans/trivy.json
             sbom-sandbox-image.cdx.json
           retention-days: 90
 
