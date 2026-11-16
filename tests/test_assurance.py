@@ -55,6 +55,10 @@ def evidence(tmp_path):
     (directory / "tests.json").write_text(json.dumps(
         {"passed": 70, "failed": 0, "errors": 0, "skipped": 0,
          "containment_exercised": True}), encoding="utf-8")
+    (directory / "quality.json").write_text(json.dumps(
+        {"held": True, "comparable": True, "uncovered": 250, "statements": 1000,
+         "baseline": 256, "baseline_recorded_on": "2026-11-16", "breaches": [],
+         "tests_not_run": []}), encoding="utf-8")
     (directory / "supply.json").write_text(json.dumps(
         {"image": "python@sha256:" + "a" * 64,
          "policy_engine_verified": True,
@@ -244,6 +248,27 @@ def test_a_declared_gap_appears_in_the_bundle_rather_than_scoring_green(
     gap = next(e for e in built["controls"]["assessed"] if e["control"] == "T-4")
     assert gap["state"] == "declared_gap"
     assert gap["detail"] == "named and tracked"
+
+
+def test_a_coverage_gate_that_could_not_judge_is_not_recorded_as_a_pass(
+        evidence, trail_path, catalog):
+    """Not comparable is an unanswered question, and an unanswered question is not a yes."""
+    (evidence / "quality.json").write_text(json.dumps(
+        {"held": False, "comparable": False, "tests_not_run": ["tests.test_sandbox::x"]}),
+        encoding="utf-8")
+    built = build(evidence, trail_path, catalog)
+    assert built["evidence"]["quality.no_new_untested_code"]["state"] == "not_evidenced"
+
+
+def test_a_failed_coverage_gate_names_what_breached(evidence, trail_path, catalog):
+    (evidence / "quality.json").write_text(json.dumps(
+        {"held": False, "comparable": True, "uncovered": 300, "statements": 1000,
+         "baseline": 256, "breaches": ["quality/gate.py: 12 uncovered lines, 4 allowed"],
+         "tests_not_run": []}), encoding="utf-8")
+    built = build(evidence, trail_path, catalog)
+    fact = built["evidence"]["quality.no_new_untested_code"]
+    assert fact["state"] == "not_held"
+    assert "quality/gate.py" in fact["detail"]
 
 
 def test_the_fact_keys_are_exactly_what_the_catalog_may_name(evidence, trail_path):

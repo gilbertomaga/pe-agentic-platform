@@ -19,3 +19,7 @@ filed/
 *.cdx.json
 receipt.json
 retention.json
+coverage.xml
+junit.xml
+.coverage
+.coverage.*

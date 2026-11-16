@@ -1,0 +1,17 @@
+# Coverage is measured against the repository root rather than per package, so a file is named
+# by its path and two `__init__.py` files are two files. Measured per package, every package's
+# `__init__.py` is called `__init__.py`, and the baseline the quality gate reads cannot tell them
+# apart. A gate that cannot name what it is holding you to is not a gate.
+
+[run]
+source = .
+branch = True
+omit =
+    tests/*
+    .venv/*
+    venv/*
+
+[report]
+# Fractions in a report are noise. The quality gate counts uncovered lines, which is an integer
+# and ratchets in one direction. See quality/gate.py.
+precision = 0

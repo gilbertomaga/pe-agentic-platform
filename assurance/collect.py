@@ -47,6 +47,7 @@ PRODUCES = (
     "trail.run_recorded",
     "tests.all_passed",
     "tests.containment_exercised",
+    "quality.no_new_untested_code",
     "supply.image_pinned",
     "supply.policy_engine_verified",
     "supply.bill_of_materials",
@@ -80,6 +81,27 @@ def _tests(evidence: dict | None) -> dict[str, Fact]:
             "the sandbox tests ran against a real daemon" if contained else
             "the sandbox tests were skipped, so this run proves nothing about containment"),
     }
+
+
+def _quality(evidence: dict | None) -> dict[str, Fact]:
+    if evidence is None:
+        return {"quality.no_new_untested_code": Fact(
+            None, "no quality.json in the evidence directory; the coverage gate did not run")}
+
+    # Not comparable is not a pass. A partial run cannot say whether the change left more code
+    # untested, so the bundle records that the question was unanswered rather than answered yes.
+    if not evidence.get("comparable", True):
+        return {"quality.no_new_untested_code": Fact(
+            None, f"{len(evidence.get('tests_not_run', []))} tests did not run, so coverage "
+                  "describes a partial execution and was not judged")}
+
+    breaches = evidence.get("breaches") or []
+    return {"quality.no_new_untested_code": Fact(
+        bool(evidence.get("held")),
+        f"{evidence.get('uncovered')} uncovered lines of {evidence.get('statements')}, "
+        f"baseline {evidence.get('baseline')} recorded "
+        f"{evidence.get('baseline_recorded_on', 'unknown')}" if not breaches else
+        "; ".join(breaches[:3]))}
 
 
 def _supply(evidence: dict | None) -> dict[str, Fact]:
@@ -134,6 +156,7 @@ def facts(run_id: str, evidence_dir: Path, trail_path: Path) -> dict[str, Fact]:
     found = {}
     found.update(_trail(run_id, trail_path))
     found.update(_tests(_read(evidence_dir / "tests.json")))
+    found.update(_quality(_read(evidence_dir / "quality.json")))
     found.update(_supply(_read(evidence_dir / "supply.json")))
 
     # The contract this module publishes is the key set, so it is checked rather than trusted.

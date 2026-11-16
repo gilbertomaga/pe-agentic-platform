@@ -410,3 +410,60 @@ client's store and their account configuration, and the delete probe in CI there
 happened instead of asserting an outcome it is not in a position to know. What would close this
 properly is the store countersigning its own receipt at the time of the write, which is the
 client's store's job and is named in assurance/system-of-record.md rather than claimed anywhere.
+
+
+## D12 · A quality gate that blocks, and a bar somebody agreed to
+
+**2026-11-16 · quality, CI, assurance**
+
+The suite ran on every change and nothing was held to it beyond passing. Coverage was not
+measured, so the platform could not tell a change that added tested code from one that added
+untested code, and both were green. That is the gap this closes, and making it block was the
+easy part. What took the thinking was what it blocks on.
+
+**Not a coverage percentage.** A target of eighty percent is either below where the code already
+sits, in which case it never fires and is decoration, or above it, in which case everybody is red
+on the first day and the gate is switched off inside a fortnight. Worse than either, a percentage
+can be held level while untested code is added, by adding tested code beside it in the same file.
+So the number is uncovered lines, an integer, and the rule is that it may not go up. A change
+that adds code with no tests fails whatever it adds elsewhere.
+
+**A recorded baseline, not a computed one.** The allowance is a file in the repository and
+lowering it is a commit. A gate that recalculates its bar from the previous build can be walked
+downwards one change at a time, with every individual step looking reasonable and nobody ever
+seeing the slope. Here the slope is a diff.
+
+**A new file starts at zero.** Code arriving untested has to be either tested or written into the
+baseline in the same change, where a reviewer sees the number being taken on. That is the
+difference between debt somebody accepted and debt that accumulated while everyone was looking at
+a percentage that had not moved much.
+
+**It refuses to judge a run that did not finish.** This is the decision I would defend hardest.
+If any test was skipped, the coverage numbers describe a run where some code could not execute,
+and comparing those against a baseline recorded from a full run fails a person for their machine
+rather than for their change. Do that twice and the gate has the reputation that gets it bypassed,
+and a bypassed gate is worse than no gate because it still appears on the board. So a skipped test
+produces "not comparable", which names what did not run, and that is a non zero exit in CI, where
+nothing should skip. The assurance bundle records it as unevidenced rather than as a pass,
+because an unanswered question is not a yes.
+
+That distinction cost nothing to build and is the same one the bundle already makes about
+evidence. It keeps turning out to be the useful one.
+
+**The same gate for everybody.** There is no author, actor or branch anywhere in the gate or in
+the build around it, so an agent's change meets exactly the gate a person's change meets. That is
+a claim worth more than a sentence, so a structural test reads the workflows and fails if any of
+them mentions who made the change. One `if: github.actor ==` would have made the claim false
+while every other test stayed green.
+
+**What a blocked Builder gets.** The numbers, the files, and the name of the file where the bar
+lives, written to the job summary rather than left in a log. Somebody who has to read a build log
+to find out why they were stopped is somebody learning to work around the thing that stopped them.
+
+**What this does not do, which is most of quality.** Coverage says a line executed. It does not
+say anything was asserted about it, and a suite of tests that call everything and assert nothing
+scores perfectly here. The honest instrument for that is mutation testing, which is not in this
+platform, and the reason is cost rather than principle: it is minutes per run where this is
+seconds. Naming it is better than implying the gate measures something it does not. The gate also
+reads JaCoCo as well as coverage.py, because the delivery platform underneath this one is mostly
+Java, and a quality gate that understands half an estate is an argument for a second gate.

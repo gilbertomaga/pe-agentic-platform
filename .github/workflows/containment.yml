@@ -43,7 +43,7 @@ jobs:
           PY
 
       - name: Install pytest
-        run: python -m pip install --quiet pytest
+        run: python -m pip install --quiet pytest pytest-cov
 
       - name: Confirm a Docker daemon is reachable
         run: docker info --format '{{.ServerVersion}}'
@@ -79,7 +79,27 @@ jobs:
         env:
           REQUIRE_DOCKER: "1"
           REQUIRE_OPA: "1"
-        run: python -m pytest -q -rs --junitxml=evidence/junit.xml
+        run: |
+          python -m pytest -q -rs \
+            --junitxml=evidence/junit.xml \
+            --cov --cov-report=xml:evidence/coverage.xml
+
+      # The quality gate, and it blocks. It is given the junit report as well as the coverage
+      # one so that it can tell a change that left code untested from a run where some code
+      # could not execute: this runner skips nothing, so here the distinction only ever means
+      # something has gone wrong with the build itself.
+      #
+      # The summary goes to the job page rather than the log, because a Builder who has to open
+      # a log to find out why a gate stopped them is a Builder learning to route around it.
+      - name: Quality gate
+        if: always()
+        run: |
+          test -f evidence/coverage.xml || { echo "the suite produced no coverage report"; exit 1; }
+          python -m quality.gate \
+            --report evidence/coverage.xml \
+            --tests evidence/junit.xml \
+            --summary "$GITHUB_STEP_SUMMARY" \
+            --evidence evidence/quality.json
 
       # The gate is a control rather than a library, so it has to run against a real trail on
       # every change, not only against fixtures inside the suite. The golden path writes the

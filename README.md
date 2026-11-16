@@ -21,6 +21,14 @@ the build's actions by commit, all in `supply/pinned.toml` with the command that
 value. The runtime refuses to start on an image that is named by tag. None of it is a signature,
 and `docs/decisions.md` D10 says where that line sits rather than leaving it to be assumed.
 
+**A quality gate that blocks.** A change may not leave more code untested than it found. The bar
+is uncovered lines rather than a percentage, because a percentage can be held level while
+untested code is added beside tested code, and it lives in `quality/baseline.toml`, so lowering
+it is a commit somebody reviews rather than a number the last build computed. A new file starts
+at zero. If any test skipped, the gate says the run is not comparable instead of failing you for
+your machine. Nothing in it reads who made the change, so an agent's change meets the gate a
+person's change meets, and a structural test fails the build if that ever stops being true.
+
 **An assurance bundle the build hands over.** Every run assembles one: the traceability projected
 into a shape other consumers can read, the test and supply chain evidence the pipeline produced,
 and every control in the client's catalog with its state and the evidence behind it. It is
@@ -57,6 +65,8 @@ alerted: that is the gate working, and paging someone for it is how a channel be
     python -m runtime golden_path/agents/my-agent/plan.toml
     python -m golden_path.adoption
     python -m trail.gate
+    python -m pytest -q --cov --cov-report=xml:coverage.xml --junitxml=junit.xml
+    python -m quality.gate --report coverage.xml --tests junit.xml
     python -m assurance.collect supply --out evidence/supply.json
     python -m assurance.bundle <run-id> --evidence evidence --out bundles
     python -m assurance.land bundles/<bundle>.json --directory ./filed

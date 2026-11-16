@@ -1,0 +1,38 @@
+# Uncovered lines allowed, per file and in total. This is the quality gate's bar.
+#
+# It only ever goes down. A number here going up is a change that left more code
+# untested than it found, and it belongs in the same commit as the reason.
+#
+# Record it from a complete run. Numbers from a run with skips describe code that
+# could not execute, and a bar set from those is loose in some places and arbitrary
+# in others. `recorded_from` below says which kind of run this one came from.
+# See quality/gate.py.
+
+recorded_on = "2026-11-16"
+recorded_from = "local run, 4 tests skipped for want of a Docker daemon, so this bar is loose; CI reports where"
+total = 280
+
+[files]
+"assurance/__init__.py" = 1
+"assurance/bundle.py" = 30
+"assurance/catalog.py" = 6
+"assurance/collect.py" = 41
+"assurance/land.py" = 33
+"assurance/sink.py" = 5
+"golden_path/__init__.py" = 1
+"golden_path/adoption.py" = 13
+"golden_path/new_agent.py" = 30
+"policy/evaluate.py" = 6
+"quality/__init__.py" = 1
+"quality/coverage.py" = 4
+"quality/gate.py" = 18
+"runtime/__init__.py" = 1
+"runtime/__main__.py" = 59
+"runtime/alert.py" = 1
+"runtime/runner.py" = 3
+"runtime/sandbox.py" = 17
+"supply/__init__.py" = 1
+"supply/verify.py" = 4
+"trail/__init__.py" = 0
+"trail/gate.py" = 4
+"trail/trail.py" = 1

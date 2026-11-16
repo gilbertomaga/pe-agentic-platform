@@ -9,6 +9,7 @@ Agent runtime, policy layer, audit trail and golden path. Python, Docker, OPA.
 - `trail/` append only JSONL writer and the audit gate
 - `golden_path/` provisioning, and the adoption census
 - `supply/` what the platform runs, pinned by content: `pinned.toml` is the only source of truth
+- `quality/` the coverage gate and `baseline.toml`, the bar a change is held to
 - `assurance/` the control catalog, the bundle assembled per run, and the sink that files it
 - `docs/decisions.md` decision log, read this before changing behaviour
 
@@ -19,6 +20,7 @@ Agent runtime, policy layer, audit trail and golden path. Python, Docker, OPA.
     python -m golden_path.new_agent <name>
     python -m golden_path.adoption [inventory-file]
     python -m trail.gate
+    python -m quality.gate --report coverage.xml --tests junit.xml [--update NOTE]
     python -m assurance.collect {tests,supply} --out <file>
     python -m assurance.bundle <run-id> --evidence <dir> --out <dir>
     python -m assurance.land <bundle> --bucket <bucket> | --directory <dir>
@@ -38,4 +40,8 @@ Agent runtime, policy layer, audit trail and golden path. Python, Docker, OPA.
   bundle also carries no assembly timestamp: it has to be reproducible byte for byte. See D11.
 - The control catalog is the client's. Nothing shipped here may claim to be a named framework,
   and there is a test for that.
+- Nothing in the build may be conditioned on who made the change. Agent change meets the gate
+  human change meets, and a structural test reads the workflows for `github.actor` and friends.
+- `quality/baseline.toml` only goes down. Raising a number belongs in the same commit as the
+  reason, and the gate never rewrites it on its own. See D12.
 - Nothing in here may modify `policy/`.

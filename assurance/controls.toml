@@ -52,6 +52,12 @@ statement = "The isolation controls are exercised against a real runtime on ever
 fact = "tests.containment_exercised"
 blocking = true
 
+[[control]]
+id = "DEMO-QA-03"
+statement = "A change does not ship if it leaves more code untested than it found, and the bar it is held to is a reviewed number rather than a computed one."
+fact = "quality.no_new_untested_code"
+blocking = true
+
 # --------------------------------------------------------------- supply chain
 
 [[control]]
