@@ -40,3 +40,24 @@ version = "v1.22.4"
 asset = "opa_linux_amd64_static"
 sha256 = "35e3b352e715e80624ead6c89930d8585f6f7d94cdc409eb2a9fe36620dcccba"
 pinned_on = "2026-11-16"
+
+[evidence_store_emulator]
+# An S3 compatible server the build starts, so the path that hands a bundle to the client's
+# evidence store is exercised against a real API rather than a stubbed one in a unit test.
+#
+#   TOKEN=$(curl -s "https://auth.docker.io/token?service=registry.docker.io\
+#     &scope=repository:localstack/localstack:pull" | jq -r .token)
+#   curl -sI -H "Authorization: Bearer $TOKEN" \
+#     -H "Accept: application/vnd.oci.image.index.v1+json" \
+#     https://registry-1.docker.io/v2/localstack/localstack/manifests/4.9.1 \
+#     | grep -i docker-content-digest
+#
+# What it proves and what it does not. It proves this platform's own behaviour: that it refuses
+# a bucket without object lock, that it writes with compliance retention, and that the store
+# records that retention against the object. It does not prove that retention is enforced. An
+# emulator refusing a delete is evidence that the emulator refuses deletes. Enforcement is the
+# client's store's property and belongs in their configuration, not in a claim made here.
+repository = "localstack/localstack"
+was_tagged = "4.9.1"
+digest = "sha256:ef90c3d6d69e36752d0154f9bc21099fc70dfbffc99a0145a6d7d04a721a6124"
+pinned_on = "2026-11-16"

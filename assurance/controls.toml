@@ -1,0 +1,96 @@
+# The control catalog.
+#
+# THIS CATALOG IS NOT A CLIENT'S. It is a demonstration one, and it says so in `source` below so
+# that nobody can mistake it for a framework somebody is actually held to. A real engagement
+# replaces this file with the client's own control set, from their regime: their financial
+# conduct rules, their data protection regime, their industry standard. Nothing else in the
+# platform changes when it does, which is the property this file exists to demonstrate.
+#
+# Each control names exactly one of:
+#   fact         machine evidence this platform produces on every change, keyed to collect.PRODUCES
+#   attestation  a person accepted something no scanner can see; it carries a name and expires
+#   gap          the control cannot be met yet, with the reason, tracked rather than silent
+#
+# `blocking = true` means a change that fails this control does not ship. The bundle still lands
+# in the evidence store either way. See docs/decisions.md D11 for why that is not a contradiction.
+
+version = "demo-1"
+framework = "Demonstration control set for an agentic delivery platform"
+source = "written for this platform, not taken from any client or standard"
+
+# ---------------------------------------------------------------- traceability
+
+[[control]]
+id = "DEMO-TR-01"
+statement = "Every action an automated agent takes is recorded against the request that caused it and the decision that allowed it."
+fact = "trail.run_recorded"
+blocking = true
+
+[[control]]
+id = "DEMO-TR-02"
+statement = "The record of what was done cannot be altered or removed after the fact without detection."
+fact = "trail.chain_intact"
+blocking = true
+
+[[control]]
+id = "DEMO-TR-03"
+statement = "An action requiring human authorisation does not proceed without a named person recorded against it."
+fact = "trail.no_unnamed_approvals"
+blocking = true
+
+# ---------------------------------------------------------------------- quality
+
+[[control]]
+id = "DEMO-QA-01"
+statement = "Change is tested automatically before it ships, and a failing test stops it."
+fact = "tests.all_passed"
+blocking = true
+
+[[control]]
+id = "DEMO-QA-02"
+statement = "The isolation controls are exercised against a real runtime on every change, not asserted in configuration."
+fact = "tests.containment_exercised"
+blocking = true
+
+# --------------------------------------------------------------- supply chain
+
+[[control]]
+id = "DEMO-SC-01"
+statement = "What executes is fixed by content, so the thing reviewed is the thing that runs."
+fact = "supply.image_pinned"
+blocking = true
+
+[[control]]
+id = "DEMO-SC-02"
+statement = "The component that makes the security decisions is verified against a published checksum before it is used."
+fact = "supply.policy_engine_verified"
+blocking = true
+
+[[control]]
+id = "DEMO-SC-03"
+statement = "The contents of what executes are disclosed in a machine readable bill of materials, retained with the change."
+fact = "supply.bill_of_materials"
+blocking = false
+
+# ------------------------------------------------------------- needs a human
+
+[[control]]
+id = "DEMO-GV-01"
+statement = "A named owner has accepted the residual risk of operating the agent fleet at its current level of assurance."
+attestation = "attestations/residual-risk.toml"
+valid_days = 90
+blocking = true
+
+# ------------------------------------------------------- declared, not met yet
+
+[[control]]
+id = "DEMO-SC-04"
+statement = "Artifacts are signed by a named publisher identity and their provenance is attested."
+gap = "The base image is not signed by any publisher identity this platform can name, and verifying nothing against nobody is theatre with a green tick on it. This closes at the point the platform builds its own image. See docs/decisions.md D10."
+blocking = false
+
+[[control]]
+id = "DEMO-SE-01"
+statement = "Source is scanned for committed secrets before it ships, and a finding blocks."
+gap = "No secret scanning runs on this repository. The control is real and the gap is open; it is the next piece of Module 4 Component 2 to land here rather than something this platform has decided not to do."
+blocking = false

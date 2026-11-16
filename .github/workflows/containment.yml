@@ -9,6 +9,10 @@ name: Containment
 # commit, the sandbox image by digest, the policy engine by checksum. The pins live in
 # supply/pinned.toml and are read from it here, so there is one place to change and one place to
 # review. See docs/decisions.md D10 for what that buys and what it does not.
+#
+# The build also assembles the assurance bundle for the change it just checked, and hands it to
+# an evidence store. That is the point of D11: the proof is a product of running, not something
+# somebody assembles the week before an audit.
 
 on:
   push:
@@ -58,21 +62,6 @@ jobs:
           sudo mv opa /usr/local/bin/opa
           opa version
 
-      - name: Run the suite, with the containment tests required
-        env:
-          REQUIRE_DOCKER: "1"
-          REQUIRE_OPA: "1"
-        run: python -m pytest -q -rs
-
-      # The gate is a control rather than a library, so it has to run against a real trail on
-      # every change, not only against fixtures inside the suite. The golden path writes the
-      # trail, the gate then has to clear it, and a non-zero exit stops the build.
-      - name: Walk the golden path, which writes a trail
-        run: python -m golden_path.new_agent ci-probe
-
-      - name: Audit gate
-        run: python -m trail.gate
-
       # An SBOM of the image the sandbox actually runs, not of a tag that resolved to it once.
       # It is evidence rather than a gate: it answers "what was in the thing that ran" after the
       # fact, which is the question a disclosure makes urgent and nobody can answer in arrears.
@@ -84,12 +73,191 @@ jobs:
           output-file: sbom-sandbox-image.cdx.json
           upload-artifact: false
 
-      - name: Keep the bill of materials with the build that produced it
+      # The report is written whether the suite passes or fails, because a failing suite is
+      # evidence too and the bundle has to be able to say so.
+      - name: Run the suite, with the containment tests required
+        env:
+          REQUIRE_DOCKER: "1"
+          REQUIRE_OPA: "1"
+        run: python -m pytest -q -rs --junitxml=evidence/junit.xml
+
+      # The gate is a control rather than a library, so it has to run against a real trail on
+      # every change, not only against fixtures inside the suite. The golden path writes the
+      # trail, the gate then has to clear it, and a non-zero exit stops the build.
+      - name: Walk the golden path, which writes a trail
+        run: python -m golden_path.new_agent ci-probe
+
+      - name: Audit gate
+        run: python -m trail.gate
+
+      # Evidence is read out of what the steps produced, not asserted by the steps. The supply
+      # collector hashes the OPA binary that is actually on PATH against the pin, so a workflow
+      # edited to install it from somewhere else fails the control rather than printing a tick.
+      - name: Collect the evidence the steps left behind
+        if: always()
+        run: |
+          python -m assurance.collect tests --junit evidence/junit.xml --out evidence/tests.json
+          python -m assurance.collect supply \
+            --sbom sbom-sandbox-image.cdx.json --out evidence/supply.json
+
+      # The bundle is assembled even when the change failed, and it says which control failed.
+      # An evidence store that only ever receives passes is a marketing database with an audit
+      # trail's filename. What blocks the change is this step's exit code, not a missing bundle.
+      - name: Assemble the assurance bundle
+        if: always()
+        run: |
+          python -m assurance.bundle provision-ci-probe \
+            --evidence evidence --out bundles \
+            --commit "${GITHUB_SHA}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --build "${GITHUB_RUN_ID}"
+
+      - name: Keep the bundle and its evidence with the build that produced them
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
-          name: sbom-sandbox-image
-          path: sbom-sandbox-image.cdx.json
+          name: assurance-bundle
+          path: |
+            bundles/
+            evidence/
+            sbom-sandbox-image.cdx.json
           retention-days: 90
+
+  # Landing the bundle somewhere this platform cannot reach back into. Steve's note on Module 3
+  # was that the trail lives in a file in my repository, which is the whole problem in one
+  # sentence: an audit record held by the party being audited is worth that party's word.
+  #
+  # What this job proves is this platform's own behaviour against a real S3 API: that it refuses
+  # a bucket with no object lock before writing anything, that it writes with compliance
+  # retention, and that the store records that retention against the object. What it does not
+  # prove is that retention is enforced. An emulator refusing a delete is evidence that the
+  # emulator refuses deletes. Enforcement is a property of the client's store and their
+  # configuration, and it is described in assurance/system-of-record.md rather than claimed here.
+  evidence-store:
+    runs-on: ubuntu-latest
+    needs: containment
+    if: always()
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with:
+          name: assurance-bundle
+
+      - name: Read the pin for the store this runs against
+        id: pin
+        run: |
+          python - >> "$GITHUB_OUTPUT" <<'PY'
+          from supply import verify
+          print("emulator=" + verify.evidence_store_emulator())
+          PY
+
+      - name: Start an S3 compatible store, pinned by digest
+        run: |
+          docker run -d --name evidence-store -p 4566:4566 \
+            -e SERVICES=s3 '${{ steps.pin.outputs.emulator }}'
+          for _ in $(seq 1 60); do
+            if curl -sf http://localhost:4566/_localstack/health | grep -q '"s3"'; then
+              echo "s3 is up"; exit 0
+            fi
+            sleep 2
+          done
+          echo "the store never came up"; docker logs evidence-store | tail -40; exit 1
+
+      # LocalStack's documented placeholder values. They authenticate nothing: the store is a
+      # container on this runner that exists for the length of this job.
+      - name: Two buckets, one locked and one not
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: eu-west-1
+        run: |
+          aws --endpoint-url http://localhost:4566 s3api create-bucket \
+            --bucket ordinary-bucket --create-bucket-configuration \
+            LocationConstraint=eu-west-1 > /dev/null
+          aws --endpoint-url http://localhost:4566 s3api create-bucket \
+            --bucket locked-bucket --object-lock-enabled-for-bucket \
+            --create-bucket-configuration LocationConstraint=eu-west-1 > /dev/null
+          aws --endpoint-url http://localhost:4566 s3api put-object-lock-configuration \
+            --bucket locked-bucket --object-lock-configuration \
+            '{"ObjectLockEnabled":"Enabled","Rule":{"DefaultRetention":{"Mode":"COMPLIANCE","Days":365}}}'
+
+      # The fail closed control, exercised for real rather than against a stub. A sink pointed at
+      # an ordinary bucket writes successfully and returns a clean receipt, and what it produces
+      # looks exactly like an audit record and is deletable by anyone with access.
+      - name: A bucket without object lock is refused
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: eu-west-1
+        run: |
+          BUNDLE=$(ls bundles/*.json | head -1)
+          if python -m assurance.land "$BUNDLE" --bucket ordinary-bucket \
+               --endpoint http://localhost:4566; then
+            echo "the sink wrote an audit bundle into an unlocked bucket"
+            exit 1
+          fi
+          echo "refused, which is the control working"
+
+      - name: Land the bundle in the locked store
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: eu-west-1
+        run: |
+          BUNDLE=$(ls bundles/*.json | head -1)
+          python -m assurance.land "$BUNDLE" --bucket locked-bucket \
+            --endpoint http://localhost:4566 --receipt receipt.json
+          echo "KEY=assurance/$(basename "$BUNDLE")" >> "$GITHUB_ENV"
+
+      - name: The store recorded the retention against the object
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: eu-west-1
+        run: |
+          aws --endpoint-url http://localhost:4566 s3api get-object-retention \
+            --bucket locked-bucket --key "$KEY" | tee retention.json
+          MODE=$(python -c "import json;print(json.load(open('retention.json'))['Retention']['Mode'])")
+          test "$MODE" = "COMPLIANCE"
+
+      # Reported rather than asserted, deliberately. If this emulator allows the delete, that is
+      # a fact about the emulator and not about the client's store, and failing the build on it
+      # would be asserting something this job is not in a position to know.
+      - name: Probe the delete, and say plainly what happened
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: eu-west-1
+        run: |
+          VERSION=$(aws --endpoint-url http://localhost:4566 s3api list-object-versions \
+            --bucket locked-bucket --prefix assurance \
+            --query 'Versions[0].VersionId' --output text)
+          if aws --endpoint-url http://localhost:4566 s3api delete-object \
+               --bucket locked-bucket --key "$KEY" --version-id "$VERSION"; then
+            echo "NOTE: this emulator deleted a version under compliance retention."
+            echo "That is a limitation of the emulator. Enforcement is the client store's"
+            echo "property; see assurance/system-of-record.md for what they configure."
+          else
+            echo "the store refused to remove a retained version"
+          fi
+
+      - name: Keep the receipt
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: evidence-store-receipt
+          path: |
+            receipt.json
+            retention.json
+          retention-days: 90
+
+      - name: Stop the store
+        if: always()
+        run: docker rm -f evidence-store || true
 
   policy:
     runs-on: ubuntu-latest

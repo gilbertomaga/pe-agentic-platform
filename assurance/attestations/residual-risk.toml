@@ -1,0 +1,30 @@
+# An attestation: the part of assurance a scanner cannot reach.
+#
+# What this is worth, said plainly. It is a file in the repository, so it is exactly as good as
+# the review on the commit that added it, and the person attesting is the person who built the
+# platform. On a client engagement that is the wrong signature and the right mechanism: the name
+# belongs to whoever in the client's risk function actually carries the residual risk, and the
+# attestation is only evidence because it is dated, scoped, and expires.
+#
+# It expires. A signature given once about a platform that has changed since is a historical
+# document, not evidence about today, so the bundle reads an expired attestation as not held and
+# the control blocks. This one will go red on its own. That is the control working.
+
+control = "DEMO-GV-01"
+accepted_by = "Gilberto Magalhaes"
+role = "Platform Engineer, owner of this platform"
+on = "2026-11-16"
+
+scope = """
+The agent fleet as it stands: agents provisioned through the golden path, running in no network
+sandboxes, bounded by policy that denies by default, with every action recorded in a hash chained
+trail and the supply chain pinned by content.
+"""
+
+accepting = """
+Two residual risks are accepted rather than mitigated. Nothing verifies who built the sandbox
+image, because no publisher identity signs it that this platform could name. And the trail is
+only as trustworthy as the store it lands in, so the assurance it carries depends on the client's
+evidence store being configured write once, which is the client's own configuration and outside
+this platform's control to enforce.
+"""

@@ -21,6 +21,16 @@ the build's actions by commit, all in `supply/pinned.toml` with the command that
 value. The runtime refuses to start on an image that is named by tag. None of it is a signature,
 and `docs/decisions.md` D10 says where that line sits rather than leaving it to be assumed.
 
+**An assurance bundle the build hands over.** Every run assembles one: the traceability projected
+into a shape other consumers can read, the test and supply chain evidence the pipeline produced,
+and every control in the client's catalog with its state and the evidence behind it. It is
+reproducible byte for byte, named by its own digest, and it lands whether the change passed or
+failed, because an evidence store that only receives successes is not evidence of anything. The
+control catalog is the client's and lives in a file; the one shipped here says plainly that it is
+a demonstration set. The bundle goes to a bucket in the client's account under write once
+retention, with credentials that can write and nothing else, so the platform cannot reach back
+into what it filed. `assurance/system-of-record.md` is what the client configures.
+
 **A golden path that narrows.** Provisioning an agent takes a name, a purpose and the actions it
 needs. An agent cannot give itself an action the policy forbids or has no rule for, so there is no
 privilege route through onboarding. It may declare a gated one, and the path says so, but gated is
@@ -47,15 +57,28 @@ alerted: that is the gate working, and paging someone for it is how a channel be
     python -m runtime golden_path/agents/my-agent/plan.toml
     python -m golden_path.adoption
     python -m trail.gate
+    python -m assurance.collect supply --out evidence/supply.json
+    python -m assurance.bundle <run-id> --evidence evidence --out bundles
+    python -m assurance.land bundles/<bundle>.json --directory ./filed
 
 CI runs the containment proof on every push. The sandbox test opens a socket from inside the
 container and fails if it connects. Tests do not skip there: a missing Docker daemon or a missing
 OPA fails the build rather than quietly reducing the proof to a skip. The audit gate runs there
 too, against a trail the golden path writes during the build, because a gate that only ever runs
-against its own fixtures is a library.
+against its own fixtures is a library. The build then assembles the assurance bundle for the
+change it just checked and hands it to an S3 compatible store, which exercises the refusal on an
+unlocked bucket as well as the write, so the path to a client's evidence store is run rather than
+described.
+
+Run the bundler locally and it will tell you the truth about the machine you are on: with Docker
+unavailable the containment control reads not held, because the sandbox tests skipped and a suite
+that skipped them proves nothing about containment.
 
 ## Reading it
 
 `docs/decisions.md` is the decision log, with the reasoning rather than only the outcome, including
 the two defects I wrote and then found. `docs/owasp-mapping.md` maps the policy to the OWASP Top 10
 for Agentic Applications 2026: four addressed, five partial, one that does not apply yet.
+`assurance/system-of-record.md` is the bucket configuration a client applies so that this platform
+can hand over an audit record it is then unable to touch, and the last section of it is what
+retention does not solve.

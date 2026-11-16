@@ -96,6 +96,27 @@ def test_nothing_in_the_repository_names_the_sandbox_image_by_tag():
     assert offenders == [], f"these name the image by tag rather than by digest: {offenders}"
 
 
+def test_the_evidence_store_emulator_is_pinned_too():
+    """A test fixture is still a container pulled onto a runner that is holding a token."""
+    reference = supply.evidence_store_emulator()
+    assert supply.DIGEST_MARKER in reference
+    assert DIGEST.match(supply.digest_of(reference))
+
+
+def test_every_container_the_build_starts_comes_from_the_pin():
+    """Structural. A `docker run` with a tag in it is the pin quietly stepped around."""
+    offenders = []
+    for workflow in (REPO / ".github" / "workflows").glob("*.yml"):
+        text = workflow.read_text(encoding="utf-8")
+        for verb in ("docker pull", "docker run"):
+            start = 0
+            while (found := text.find(verb, start)) != -1:
+                if "steps.pin.outputs" not in text[found:found + 200]:
+                    offenders.append(f"{workflow.name}: {verb} not from the pin")
+                start = found + 1
+    assert offenders == [], offenders
+
+
 def test_the_build_verifies_the_policy_engine_it_downloads():
     """Structural, and the reason this module exists.
 

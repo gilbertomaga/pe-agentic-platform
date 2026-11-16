@@ -67,6 +67,20 @@ def sandbox_image(path: Path = PINNED) -> str:
     return require_digest(f"{repository}@{digest}")
 
 
+def evidence_store_emulator(path: Path = PINNED) -> str:
+    """The S3 compatible server the build starts to exercise the evidence store path.
+
+    Pinned like anything else that runs here. It is a test fixture rather than a runtime
+    component, and an unpinned test fixture is still a container pulled by a label somebody can
+    move, on a runner holding a token.
+    """
+    pin = _load(path).get("evidence_store_emulator", {})
+    repository, digest = pin.get("repository"), pin.get("digest")
+    if not repository or not digest:
+        raise Unpinned(f"{path} has no pinned evidence store emulator")
+    return require_digest(f"{repository}@{digest}")
+
+
 def require_digest(reference: str) -> str:
     """Return the reference, or refuse it for naming an image by a label somebody can move."""
     if DIGEST_MARKER not in reference:

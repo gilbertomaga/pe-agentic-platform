@@ -317,3 +317,96 @@ instead of reporting twenty-four identical hash mismatches and sending somebody 
 edit that never happened. It still fails: a chain carrying two shapes is a real break, and rolling
 it forward is a decision somebody takes. After this the field set is frozen, and the next change
 needs a versioned record and a migration rather than an edit.
+
+
+## D11 · The evidence leaves the building
+
+**2026-11-16 · assurance, trail, CI**
+
+The note that started this was one sentence: the trail lives in a file in my repository. That is
+the whole problem. An audit record held by the party being audited is worth exactly what that
+party's word is worth, and not having to take anyone's word was the point of writing it.
+
+Three things are wrong with the trail as an audit record, and only the first one is obvious. It
+sits in the platform's own storage. It has no notion of a change, so it answers "what did the
+agent do" and cannot answer "what shipped on Tuesday", which is the question an auditor actually
+asks. And it carries traceability and nothing else: no test result, no scan, no control. All
+three are fixed by the same move, which is to stop treating the trail as the deliverable and
+start treating it as one input to something that is.
+
+**What a bundle is.** One per run. It carries the traceability projected into a published shape,
+the quality and security evidence the pipeline produced, and every control in the client's
+catalog with its state and the evidence behind it. Four properties, each a decision rather than
+a detail.
+
+It is reproducible. No assembly timestamp, no path, nothing about the machine that built it.
+Assemble it twice from the same evidence and the bytes are identical, so the digest is something
+a person who was not there can re-derive and check. When that turned out to be awkward the
+timestamp moved into the receipt, where it belongs: when a bundle was filed is a fact about the
+filing, not about the change.
+
+It is content addressed. The bundle's name is its own digest, so an altered bundle is a
+different object rather than a replacement for this one, and a store cannot hold two different
+bundles under one name.
+
+It always lands, pass or fail. A failing change produces a bundle that says which control failed
+and why, and that bundle goes to the evidence store like any other. This was the one decision I
+went back and forth on, and the argument that settled it is that an evidence store containing
+only successes is a marketing database with an audit trail's filename. What stops the change is
+the exit code of the step that reads the bundle, not the bundle going missing.
+
+Its shape is published. `STEP_FIELDS` is a contract with the three pathways downstream that
+consume this bundle, so the trail's internal record can change without breaking them and a field
+added to the trail does not silently leak into what a client's auditor receives. There is a test
+holding one against the other, which is the only form of contract that survives contact with a
+deadline.
+
+**The catalog is the client's, so it is data.** The temptation here was to ship a SOC 2 mapping
+and call the component done. I do not have the client's control framework; I have an open thread
+with their security team and no answer yet, and inventing one would have produced a document that
+maps real evidence to controls nobody is held to. So the catalog is a file, the shipped one says
+in its first line that it is a demonstration set, and a test fails if it ever claims to be a
+named regime. Replacing it with the client's own is the only change a real engagement needs.
+
+A control is satisfied in exactly one of three ways, and they are deliberately different. Machine
+evidence, produced automatically on every change. An attestation, where a person accepted
+something no scanner can see. Or a declared gap, which is the control written down with the
+reason it cannot be met yet. The gap is the one worth defending: a control that simply is not in
+the catalog scores nothing and looks like nothing, and a control nothing evaluates scores green.
+Both are the same audit finding eighteen months later. Two gaps are declared here, signing and
+secret scanning, and they are in the bundle every time it is assembled.
+
+Two checks run when the catalog loads and both are failures rather than warnings. A control
+mapped to evidence the platform does not produce means the catalog and the platform have drifted,
+and it would otherwise read as unmet forever while looking like a data problem. A control naming
+none of the three means nobody decided about it.
+
+**The attestation expires, and it will go red in February.** A signature given once about a
+platform that has changed since is a historical document, not evidence about today, so an
+attestation carries a date and a validity period and the bundle reads an expired one as not held.
+The one in this repository is ninety days from 2026-11-16. It is also signed by the person who
+built the platform, which on a client engagement is the wrong name and the right mechanism, and
+the file says so rather than leaving it to be noticed.
+
+**Where it lands, and what that costs the platform.** The sink writes into a bucket in the
+client's own account with object lock in compliance mode, and the credentials it writes with hold
+`s3:PutObject` and nothing else. Not delete, not the retention setting, not the lifecycle rules.
+Once a bundle is filed this platform cannot change it or remove it, and that inability is the
+thing that makes the producer of the record an acceptable producer of the record.
+
+Compliance mode rather than governance, because governance retention can be removed by anyone
+holding one extra permission, which makes a governance bucket write once for people who do not
+have it. The sink checks the bucket is locked before it writes anything, because object lock is
+bucket configuration rather than a flag on the write: pointed at an ordinary bucket it would
+write successfully, return a clean receipt, and produce something indistinguishable from an audit
+record that anybody could delete.
+
+**What this does not prove, which is the part worth reading.** The build starts a real S3
+compatible store and exercises the whole path against it: the refusal on an unlocked bucket, the
+write with compliance retention, the retention read back off the object. That is evidence about
+this platform's behaviour. It is not evidence that retention is enforced, because an emulator
+refusing a delete proves only that the emulator refuses deletes. Enforcement belongs to the
+client's store and their account configuration, and the delete probe in CI therefore reports what
+happened instead of asserting an outcome it is not in a position to know. What would close this
+properly is the store countersigning its own receipt at the time of the write, which is the
+client's store's job and is named in assurance/system-of-record.md rather than claimed anywhere.

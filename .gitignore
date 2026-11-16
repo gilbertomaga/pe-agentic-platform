@@ -10,3 +10,12 @@ trail/*.head
 trail/*.closed-*
 .DS_Store
 golden_path/agents/
+
+# Build output: the evidence a pipeline step leaves behind, the bundle assembled from it, and
+# the receipt from filing it. All of it belongs to a build, not to the repository.
+evidence/
+bundles/
+filed/
+*.cdx.json
+receipt.json
+retention.json
