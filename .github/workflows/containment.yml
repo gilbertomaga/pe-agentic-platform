@@ -212,7 +212,13 @@ jobs:
           BUNDLE=$(ls bundles/*.json | head -1)
           python -m assurance.land "$BUNDLE" --bucket locked-bucket \
             --endpoint http://localhost:4566 --receipt receipt.json
-          echo "KEY=assurance/$(basename "$BUNDLE")" >> "$GITHUB_ENV"
+          # Read the key the store actually got, rather than recomputing what it should have
+          # been. The next two steps are checking the object that was filed, and a key derived
+          # twice is two answers to where it went.
+          python - >> "$GITHUB_ENV" <<'PY'
+          import json
+          print("KEY=" + json.load(open("receipt.json"))["location"].split("/", 3)[3])
+          PY
 
       - name: The store recorded the retention against the object
         env:

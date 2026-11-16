@@ -158,8 +158,19 @@ class ObjectStore:
         self.retain_days = retain_days
         self.endpoint = endpoint
 
-    def key_for(self, name: str) -> str:
-        return f"{self.prefix}/{name}" if self.prefix else name
+    def key_for(self, name: str, on: datetime | None = None) -> str:
+        """Partition by the day it was filed, so the store is queryable without reading it.
+
+        An auditor asks what shipped in a period, not what one run id did, and a flat prefix
+        makes that question a full listing of every bundle ever filed. Dated prefixes are what
+        every object store query engine already understands, so the answer is a prefix rather
+        than a scan. The date is the filing date, which is why it is here and not in the bundle:
+        the bundle has to stay reproducible, and a receipt is allowed to know what day it is.
+        """
+        on = on or datetime.now(timezone.utc)
+        parts = [self.prefix] if self.prefix else []
+        parts += [on.strftime("%Y"), on.strftime("%m"), on.strftime("%d"), name]
+        return "/".join(parts)
 
     def check(self) -> str:
         """Refuse a bucket that is not locked, before anything is written into it."""

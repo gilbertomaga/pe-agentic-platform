@@ -30,6 +30,21 @@ version rather than replacing one, and the retained version stays retained.
 No lifecycle rule that expires objects before the retention period, and no rule that transitions
 them somewhere the auditor cannot read.
 
+## How it is laid out, so it can be queried
+
+    <prefix>/<year>/<month>/<day>/<run id>.<bundle digest>.json
+
+An auditor asks what shipped in a period, not what one run identifier did. A flat prefix turns
+that question into a listing of every bundle ever filed, so bundles are partitioned by the day
+they were filed and the question becomes a prefix. That is the layout every object store query
+engine already understands, so the client can point their own tooling at it without the platform
+providing a query service, which is one less thing of ours between their risk function and their
+evidence.
+
+The date is the filing date rather than anything inside the bundle. The bundle has to stay
+reproducible byte for byte, so it carries no clock; the receipt is allowed to know what day it
+is, and the key is part of the filing.
+
 ## The platform's credentials
 
 A role the platform assumes, with one permission on one prefix:

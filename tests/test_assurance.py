@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import subprocess
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -296,5 +296,13 @@ def test_the_store_checks_the_lock_before_it_puts(monkeypatch):
     receipt = sink.ObjectStore("b", prefix="assurance").put("x.json", b"x")
     assert calls[0] == ["s3api", "get-object-lock-configuration"]
     assert calls[1] == ["s3api", "put-object"]
-    assert receipt.location == "s3://b/assurance/x.json"
+    assert receipt.location.startswith("s3://b/assurance/")
+    assert receipt.location.endswith("/x.json")
     assert receipt.mode == "write-once"
+
+
+def test_bundles_are_filed_under_the_day_they_were_filed(monkeypatch):
+    """An auditor asks what shipped in a period, and a flat prefix makes that a full scan."""
+    store = sink.ObjectStore("b", prefix="assurance")
+    key = store.key_for("run-1.abc.json", on=datetime(2026, 11, 16, tzinfo=timezone.utc))
+    assert key == "assurance/2026/11/16/run-1.abc.json"
