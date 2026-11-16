@@ -5,5 +5,8 @@ venv/
 .env
 trail/*.jsonl
 trail/*.head
+# A chain closed because the record shape changed. Kept locally so the roll forward is
+# auditable on the machine it happened on, never committed: it is a record, not source.
+trail/*.closed-*
 .DS_Store
 golden_path/agents/

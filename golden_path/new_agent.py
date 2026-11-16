@@ -23,14 +23,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from policy import evaluate
+from supply import verify as supply
 from trail import trail
 
 TEMPLATE = Path(__file__).with_name("template")
 AGENTS = Path(__file__).with_name("agents")
 
-#: Defaults the platform owns. A team does not set these.
+#: Defaults the platform owns. A team does not set these. The image is deliberately not here:
+#: it lives in supply/pinned.toml, by digest, so there is exactly one place that says what runs.
 SANDBOX_DEFAULTS = {
-    "image": "python:3.12-slim",
     "network": "none",
     "timeout_seconds": 120,
     "memory": "512m",
@@ -97,6 +98,16 @@ def gates(config: Path) -> list[Gate]:
         f"{', '.join(needs_a_human)} will not run without a named approver. "
         f"Name one in the [approvals] block of this agent's plan.toml."))
 
+    # The agent inherits an image it did not choose and cannot change, and the gate prints the
+    # digest rather than asserting the pin, so a Builder reading the output sees the bytes their
+    # agent will run on. An unpinned platform stops the path here: provisioning an agent against
+    # an image nobody has fixed is provisioning it against whatever the tag points at tomorrow.
+    try:
+        checks.append(Gate("sandbox image is pinned by digest", True, supply.sandbox_image()))
+    except supply.Unpinned as unpinned:
+        checks.append(Gate("sandbox image is pinned by digest", False, str(unpinned)))
+        return checks
+
     checks.append(Gate("sandbox has no network", SANDBOX_DEFAULTS["network"] == "none"))
     checks.append(Gate("sandbox is time bounded", SANDBOX_DEFAULTS["timeout_seconds"] > 0))
     return checks
@@ -128,9 +139,13 @@ def record(name: str, cleared: bool) -> None:
     """
     outcome = "allow" if cleared else "deny"
     reason = "provisioned through the golden path" if cleared else "stopped at a gate"
+    try:
+        evidence = {"image": supply.sandbox_image()}
+    except supply.Unpinned:
+        evidence = None
     for event in ("decided", "executed") if cleared else ("decided",):
         trail.append(f"provision-{name}", 1, f"provision agent {name}",
-                     "create", "agent", outcome, reason, event)
+                     "create", "agent", outcome, reason, event, evidence=evidence)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -8,6 +8,7 @@ Agent runtime, policy layer, audit trail and golden path. Python, Docker, OPA.
 - `policy/` OPA policies and the evaluation entry point
 - `trail/` append only JSONL writer and the audit gate
 - `golden_path/` provisioning, and the adoption census
+- `supply/` what the platform runs, pinned by content: `pinned.toml` is the only source of truth
 - `docs/decisions.md` decision log, read this before changing behaviour
 
 ## Running
@@ -24,4 +25,8 @@ Agent runtime, policy layer, audit trail and golden path. Python, Docker, OPA.
 - Policy denies by default. Every denial carries a reason.
 - The trail is written by the platform, never by the caller.
 - An action reaches a container only through `runtime.runner.execute`. There is a test for this.
+- Nothing names the sandbox image by tag. It comes from `supply/pinned.toml`, by digest, and the
+  runtime raises on anything else. There is a test for this too.
+- The trail's signed field set is frozen. Changing it breaks every record written before the
+  change, so it needs a versioned record and a migration, not an edit. See D10.
 - Nothing in here may modify `policy/`.

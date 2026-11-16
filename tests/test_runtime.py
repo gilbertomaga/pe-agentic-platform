@@ -21,6 +21,7 @@ import pytest
 from golden_path import new_agent
 from policy import evaluate
 from runtime import alert, runner, sandbox
+from supply import verify as supply
 from trail import gate, trail
 
 _has_opa = evaluate.available()
@@ -63,6 +64,31 @@ def no_container(monkeypatch):
 
     monkeypatch.setattr(sandbox, "run", fake)
     return calls
+
+
+# ------------------------------------------------------ nothing runs on bytes nobody fixed
+def test_an_unpinned_image_stops_the_run_before_anything_is_recorded(path, no_container, tmp_path):
+    """The same reflex as an unreachable policy engine: a run nobody can describe does not start.
+
+    Raising matters more than refusing here. A refusal would be recorded, and a record implies
+    the platform knew what it was declining to run on. It did not.
+    """
+    with pytest.raises(supply.Unpinned):
+        runner.execute("do a thing", [READ], scope=["read:repository"],
+                       workspace=tmp_path, trail_path=path, image="python:3.12-slim")
+
+    assert no_container == [], "an unpinned image reached the sandbox"
+    assert trail.read_all(path) == [], "a run that never started left a record"
+
+
+def test_the_record_says_which_bytes_the_step_ran_on(path, no_container, tmp_path):
+    runner.execute("do a thing", [READ], scope=["read:repository"],
+                   workspace=tmp_path, trail_path=path)
+
+    executed = [e for e in trail.read_all(path) if e["event"] == "executed"]
+    assert executed, "nothing executed, so there is nothing to assert about"
+    assert executed[0]["evidence"]["image"] == supply.sandbox_image()
+    assert executed[0]["evidence"]["image_digest"].startswith("sha256:")
 
 
 # ------------------------------------------------------ nothing runs that was not agreed to

@@ -30,9 +30,21 @@ DEFAULT_TRAIL = Path(__file__).with_name("audit_trail.jsonl")
 
 GENESIS = "0" * 64
 
-#: Fields that are hashed. Order matters and must not change, or every existing chain breaks.
+#: Fields that are hashed. Order matters, and changing the set breaks every chain written
+#: before the change. That happened once, on 2026-11-16, to add `evidence`: the supply chain pin
+#: has to be inside the hash or an auditor could rewrite which image a run claims to have used,
+#: and a record that can be edited is the thing this file exists to prevent. No chain outside a
+#: build existed at that point. After this, a change needs a versioned record and a migration,
+#: not an edit here.
 SIGNED = ("seq", "prev_hash", "at", "run_id", "step", "prompt",
-          "verb", "target", "outcome", "reason", "approver", "event")
+          "verb", "target", "outcome", "reason", "approver", "event", "evidence")
+
+#: The field set as it stood before that change. Kept so the verifier can say "this record
+#: predates the current shape" rather than "contents do not match", which is the same finding
+#: with none of the information somebody needs to act on it. A record that matches this still
+#: fails: a chain carrying two shapes is a real break, and rolling it forward is a decision
+#: somebody takes deliberately, not something a verifier quietly tolerates.
+SIGNED_BEFORE_EVIDENCE = tuple(field for field in SIGNED if field != "evidence")
 
 
 @dataclass(frozen=True)
@@ -41,9 +53,22 @@ class Broken:
     why: str
 
 
-def _digest(entry: dict) -> str:
-    payload = json.dumps({k: entry.get(k) for k in SIGNED}, sort_keys=True, separators=(",", ":"))
+def _digest(entry: dict, fields: tuple[str, ...] = SIGNED) -> str:
+    payload = json.dumps({k: entry.get(k) for k in fields}, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _mismatch(entry: dict) -> str:
+    """Why the hash does not match, where the verifier can tell.
+
+    A wall of identical "contents do not match" lines is technically correct and sends whoever
+    reads it hunting for an edit that never happened. The one case this platform can distinguish
+    is its own field change, so it says so.
+    """
+    if "evidence" not in entry and entry.get("hash") == _digest(entry, SIGNED_BEFORE_EVIDENCE):
+        return ("written under the record shape used before 2026-11-16, when the supply chain "
+                "evidence field was added; roll this chain forward deliberately")
+    return "contents do not match the recorded hash"
 
 
 def head_path(path: Path) -> Path:
@@ -71,9 +96,14 @@ def append(
     reason: str,
     event: str,
     approver: str | None = None,
+    evidence: dict | None = None,
     path: Path = DEFAULT_TRAIL,
 ) -> dict:
     """Write one record. `event` is 'decided', 'executed' or 'failed'.
+
+    `evidence` carries what the platform can prove about the run rather than decide about it: the
+    digest of the image the step actually ran on, and whatever else the assurance case needs to
+    assemble itself later. It is hashed with the rest, so it cannot be adjusted afterwards.
 
     Called by the runtime, never by a caller choosing to record. There is no code path that
     executes an action without passing through here.
@@ -92,6 +122,7 @@ def append(
         "reason": reason,
         "approver": approver,
         "event": event,
+        "evidence": evidence,
     }
     entry["hash"] = _digest(entry)
 
@@ -130,7 +161,7 @@ def verify(path: Path = DEFAULT_TRAIL) -> list[Broken]:
         if entry.get("prev_hash") != expected_prev:
             faults.append(Broken(entry.get("seq", -1), "does not follow the previous record"))
         if entry.get("hash") != _digest(entry):
-            faults.append(Broken(entry.get("seq", -1), "contents do not match the recorded hash"))
+            faults.append(Broken(entry.get("seq", -1), _mismatch(entry)))
         expected_prev = entry.get("hash")
         expected_seq = entry.get("seq", expected_seq) + 1
 

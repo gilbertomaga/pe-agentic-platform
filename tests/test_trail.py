@@ -141,3 +141,44 @@ def test_the_gate_stops_execution_with_no_decision(path):
                  "allow", "no decision was recorded", "executed",
                  approver="someone", path=path)
     assert any("no decision recorded" in p for p in gate.check(path))
+
+
+def test_editing_the_supply_chain_evidence_breaks_the_chain(tmp_path):
+    """The evidence is inside the hash, so which image a run claims cannot be adjusted later.
+
+    This is the whole reason the signed field set changed rather than the field being bolted on
+    outside it. A digest an auditor can rewrite proves nothing about what ran.
+    """
+    path = tmp_path / "audit_trail.jsonl"
+    trail.append("r1", 1, "p", "read", "repository", "allow", "fine", "executed",
+                 evidence={"image": "python@sha256:" + "a" * 64}, path=path)
+    assert trail.verify(path) == []
+
+    record = json.loads(path.read_text(encoding="utf-8").strip())
+    record["evidence"]["image"] = "python@sha256:" + "b" * 64
+    path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+
+    faults = trail.verify(path)
+    assert faults, "the evidence was rewritten and the chain did not notice"
+    assert "do not match" in faults[0].why
+
+
+def test_a_record_from_before_the_field_change_is_named_rather_than_guessed_at(tmp_path):
+    """A wall of "contents do not match" sends somebody hunting for an edit that never happened.
+
+    The one case this platform can tell apart is its own field change, so it says so instead.
+    """
+    path = tmp_path / "audit_trail.jsonl"
+    entry = {
+        "seq": 1, "prev_hash": trail.GENESIS, "at": "2026-11-12T10:00:00.000+00:00",
+        "run_id": "r1", "step": 1, "prompt": "p", "verb": "read", "target": "repository",
+        "outcome": "allow", "reason": "fine", "approver": None, "event": "executed",
+    }
+    entry["hash"] = trail._digest(entry, trail.SIGNED_BEFORE_EVIDENCE)
+    path.write_text(json.dumps(entry) + "\n", encoding="utf-8")
+    trail.head_path(path).write_text(
+        json.dumps({"seq": 1, "hash": entry["hash"]}), encoding="utf-8")
+
+    faults = trail.verify(path)
+    assert faults, "a record written under the old shape should not verify under the new one"
+    assert "before 2026-11-16" in faults[0].why

@@ -13,7 +13,13 @@ tested, because a guardrail that is not asserted is a comment.
 
 **An audit trail the platform writes.** One record when an action is decided, another when it
 executes. Append only and hash chained, so an edited or removed entry breaks the chain. The newest
-record is anchored separately, because a chain alone does not detect truncation.
+record is anchored separately, because a chain alone does not detect truncation. Each executed
+record carries the digest of the image the step ran on, inside the hash.
+
+**A supply chain fixed by content.** The sandbox image by digest, the policy engine by checksum,
+the build's actions by commit, all in `supply/pinned.toml` with the command that produced each
+value. The runtime refuses to start on an image that is named by tag. None of it is a signature,
+and `docs/decisions.md` D10 says where that line sits rather than leaving it to be assumed.
 
 **A golden path that narrows.** Provisioning an agent takes a name, a purpose and the actions it
 needs. An agent cannot give itself an action the policy forbids or has no rule for, so there is no
@@ -52,4 +58,4 @@ against its own fixtures is a library.
 
 `docs/decisions.md` is the decision log, with the reasoning rather than only the outcome, including
 the two defects I wrote and then found. `docs/owasp-mapping.md` maps the policy to the OWASP Top 10
-for Agentic Applications 2026: four addressed, four partial, two not.
+for Agentic Applications 2026: four addressed, five partial, one that does not apply yet.

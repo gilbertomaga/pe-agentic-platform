@@ -36,13 +36,16 @@ from pathlib import Path
 
 from policy import evaluate
 from runtime import alert, sandbox
+from supply import verify as supply
 from trail import trail
 
 #: Bounds breadth. The sandbox wall clock bounds duration. Neither substitutes for the other:
 #: twenty short steps and one that never returns are different failures.
 DEFAULT_MAX_STEPS = 20
 
-DEFAULT_IMAGE = "python:3.12-slim"
+#: No default image here any more. It is resolved from supply/pinned.toml, so there is one
+#: place that says what runs and it says it by digest. A constant in this file was a second
+#: answer to that question, and a tag is not an answer at all.
 
 
 @dataclass(frozen=True)
@@ -110,7 +113,7 @@ def execute(
     workspace: Path,
     run_id: str | None = None,
     approvals: dict[str, str] | None = None,
-    image: str = DEFAULT_IMAGE,
+    image: str | None = None,
     max_steps: int = DEFAULT_MAX_STEPS,
     trail_path: Path = trail.DEFAULT_TRAIL,
     writable: bool = False,
@@ -127,10 +130,16 @@ def execute(
     allowed = set(scope)
     steps: list[Step] = []
 
-    def record(step: int, action: Action, outcome: str, reason: str,
-               event: str, approver: str | None = None) -> None:
-        trail.append(run_id, step, prompt, action.verb, action.target,
-                     outcome, reason, event, approver=approver, path=trail_path)
+    # Before the first decision, and before anything is recorded. An unpinned image means the
+    # platform cannot say what it is about to run, and raising here is the same reflex as failing
+    # closed on an unreachable policy engine: a run nobody can describe should not start.
+    image = supply.require_digest(image or supply.sandbox_image())
+    ran_on = {"image": image, "image_digest": supply.digest_of(image)}
+
+    def record(step: int, action: Action, outcome: str, reason: str, event: str,
+               approver: str | None = None, evidence: dict | None = None) -> None:
+        trail.append(run_id, step, prompt, action.verb, action.target, outcome, reason, event,
+                     approver=approver, evidence=evidence, path=trail_path)
 
     for index, action in enumerate(actions, start=1):
         if index > max_steps:
@@ -168,7 +177,7 @@ def execute(
         event = "executed" if ran else "failed"
         detail = reason if ran else _why_not(result)
 
-        record(index, action, outcome, detail, event, approver=approver)
+        record(index, action, outcome, detail, event, approver=approver, evidence=ran_on)
         steps.append(Step(index, action.name, outcome, detail,
                           executed=ran, approver=approver, result=result))
 

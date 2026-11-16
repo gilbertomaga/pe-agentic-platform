@@ -4,6 +4,11 @@ name: Containment
 # virtualization disabled in BIOS, so Docker cannot run locally and the three proof tests
 # skip there. On this runner they must run: REQUIRE_DOCKER=1 turns a missing daemon into a
 # failure, so a green build means the sandbox was actually exercised.
+#
+# Everything this build pulls in from outside is pinned by content, not by label: the actions by
+# commit, the sandbox image by digest, the policy engine by checksum. The pins live in
+# supply/pinned.toml and are read from it here, so there is one place to change and one place to
+# review. See docs/decisions.md D10 for what that buys and what it does not.
 
 on:
   push:
@@ -14,11 +19,24 @@ jobs:
   containment:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
           python-version: "3.12"
+
+      # Read rather than repeat. A pin copied into a workflow is a second answer to "what does
+      # this platform run", and the two drift the first time somebody updates one of them.
+      - name: Read the supply chain pin
+        id: pin
+        run: |
+          python - >> "$GITHUB_OUTPUT" <<'PY'
+          from supply import verify
+          opa = verify.opa()
+          print("image=" + verify.sandbox_image())
+          print("opa_url=" + opa["url"])
+          print("opa_sha256=" + opa["sha256"])
+          PY
 
       - name: Install pytest
         run: python -m pip install --quiet pytest
@@ -26,13 +44,18 @@ jobs:
       - name: Confirm a Docker daemon is reachable
         run: docker info --format '{{.ServerVersion}}'
 
-      - name: Pull the sandbox image
-        run: docker pull --quiet python:3.12-slim
+      - name: Pull the sandbox image, by digest
+        run: docker pull --quiet '${{ steps.pin.outputs.image }}'
 
-      - name: Install OPA, because the golden path gates evaluate real policy
+      # This step used to fetch a `latest` binary over the network and run it unchecked. Every
+      # guardrail decision this platform makes is whatever OPA says, so that one line put the
+      # entire policy layer in the hands of whoever could answer that URL.
+      - name: Install OPA, and check it is the binary that was pinned
         run: |
-          curl -sSL -o /usr/local/bin/opa https://openpolicyagent.org/downloads/latest/opa_linux_amd64_static
-          chmod +x /usr/local/bin/opa
+          curl -sSL -o opa '${{ steps.pin.outputs.opa_url }}'
+          echo '${{ steps.pin.outputs.opa_sha256 }}  opa' | sha256sum -c -
+          chmod +x opa
+          sudo mv opa /usr/local/bin/opa
           opa version
 
       - name: Run the suite, with the containment tests required
@@ -50,15 +73,49 @@ jobs:
       - name: Audit gate
         run: python -m trail.gate
 
+      # An SBOM of the image the sandbox actually runs, not of a tag that resolved to it once.
+      # It is evidence rather than a gate: it answers "what was in the thing that ran" after the
+      # fact, which is the question a disclosure makes urgent and nobody can answer in arrears.
+      - name: Bill of materials for the image that runs
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c  # v0.24.3
+        with:
+          image: ${{ steps.pin.outputs.image }}
+          format: cyclonedx-json
+          output-file: sbom-sandbox-image.cdx.json
+          upload-artifact: false
+
+      - name: Keep the bill of materials with the build that produced it
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: sbom-sandbox-image
+          path: sbom-sandbox-image.cdx.json
+          retention-days: 90
+
   policy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
 
-      - name: Install OPA
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.12"
+
+      - name: Read the supply chain pin
+        id: pin
         run: |
-          curl -sSL -o /usr/local/bin/opa https://openpolicyagent.org/downloads/latest/opa_linux_amd64_static
-          chmod +x /usr/local/bin/opa
+          python - >> "$GITHUB_OUTPUT" <<'PY'
+          from supply import verify
+          opa = verify.opa()
+          print("opa_url=" + opa["url"])
+          print("opa_sha256=" + opa["sha256"])
+          PY
+
+      - name: Install OPA, and check it is the binary that was pinned
+        run: |
+          curl -sSL -o opa '${{ steps.pin.outputs.opa_url }}'
+          echo '${{ steps.pin.outputs.opa_sha256 }}  opa' | sha256sum -c -
+          chmod +x opa
+          sudo mv opa /usr/local/bin/opa
           opa version
 
       - name: Check the policy is well formed

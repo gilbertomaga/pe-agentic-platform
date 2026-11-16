@@ -268,3 +268,52 @@ name one; and provisioning wrote three files while naming only the folder. All t
 handled, and the version guard sits in the package `__init__` so it runs before anything can
 import tomllib and fail less kindly. `new_agent.py` also imported `subprocess` and never used it,
 which is the kind of thing only a stranger reads closely enough to notice.
+
+
+## D10 · Pin what runs by content, and be clear that a digest is not a signature
+**2026-11-16 · supply chain, runtime, trail, CI**
+
+Everything in this repository up to here is about what an agent may do once it is running.
+Nothing was about what got to run in the first place, and three things arrived from outside and
+were trusted on sight.
+
+The sandbox image, by the tag `python:3.12-slim`. A tag is a label the publisher can move, so it
+names who built the image and not what is in it. The containment model, which is the claim this
+platform leans on hardest, was asserted against bytes nobody had fixed.
+
+The policy engine, downloaded in CI from a `latest` URL with nothing checked. That one is worse
+than the other two together. Every guardrail decision here is whatever that binary says, so
+substituting it makes the platform permissive while the build stays green and the trail records
+each decision as normal. The audit trail would be intact, hash chained, and wrong.
+
+The build's own actions, by tag, on the job that holds the token.
+
+All three are now pinned by content in `supply/pinned.toml`, with the command that produced each
+value written beside it, because a pin nobody can re-derive is a number somebody eventually bumps
+without checking. The runtime resolves the image from that file and raises before the first
+decision if what it gets is not a digest, which is the same reflex as failing closed on an
+unreachable policy engine: a run nobody can describe should not start. The golden path prints the
+digest as a gate, so a Builder sees the bytes their agent will run on rather than being told they
+are fine. CI reads the same file rather than repeating it, verifies the OPA download against the
+pinned checksum, and emits a CycloneDX SBOM of the image that actually ran.
+
+**What this does not do, which matters more than what it does.** A digest says the bytes did not
+change since I looked. It does not say who made them or that they are safe, and pinning a
+compromised image pins the compromise. The OPA checksum is published by the same project as the
+binary, so it catches a corrupted or substituted download and not a compromised release. There is
+still no signature verification, because the Docker official images are not signed by a publisher
+identity this platform can name, and verifying nothing against nobody is theatre with a green
+tick on it. The honest position is that an image we build ourselves is the point at which signing
+and provenance become real, and that is named rather than claimed. The pins also only bind what
+CI installs; a developer's locally installed OPA is their own, and the platform cannot see it.
+
+**One consequence, recorded rather than smoothed over.** The signed field set in the trail gained
+`evidence`, which carries the digest the step ran on. It had to be inside the hash: a digest an
+auditor can rewrite afterwards proves nothing about what ran. Changing the signed set invalidates
+every record written before it, and the local chain broke exactly as designed the moment the field
+landed. No chain outside a build existed at that point, so the cost was a developer trail, closed
+and kept rather than deleted. The verifier now recognises the old shape and says so by name
+instead of reporting twenty-four identical hash mismatches and sending somebody hunting for an
+edit that never happened. It still fails: a chain carrying two shapes is a real break, and rolling
+it forward is a decision somebody takes. After this the field set is frozen, and the next change
+needs a versioned record and a migration rather than an edit.

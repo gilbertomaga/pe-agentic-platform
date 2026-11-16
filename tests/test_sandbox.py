@@ -10,11 +10,16 @@ from pathlib import Path
 import pytest
 
 from runtime import sandbox
+from supply import verify as supply
+
+#: The containment proof runs on the bytes the platform actually pins, not on a tag that
+#: happened to resolve to them when somebody wrote the test.
+IMAGE = supply.sandbox_image()
 
 
 @pytest.fixture
 def argv(tmp_path):
-    return sandbox.docker_argv("abc123", "python:3.12-slim", ["python", "-c", "print(1)"], tmp_path)
+    return sandbox.docker_argv("abc123", IMAGE, ["python", "-c", "print(1)"], tmp_path)
 
 
 def pair(argv, flag):
@@ -70,7 +75,7 @@ needs_docker = pytest.mark.skipif(not _has_docker, reason="no Docker daemon (loc
 
 @needs_docker
 def test_a_run_completes_and_is_torn_down(tmp_path):
-    out = sandbox.run("python:3.12-slim", ["python", "-c", "print('hello')"], tmp_path)
+    out = sandbox.run(IMAGE, ["python", "-c", "print('hello')"], tmp_path)
     assert out.stopped_because == "completed"
     assert out.exit_code == 0
     assert "hello" in out.stdout
@@ -81,13 +86,13 @@ def test_the_sandbox_cannot_reach_the_network(tmp_path):
     """The containment claim, proven rather than asserted."""
     probe = ["python", "-c",
              "import socket;socket.create_connection(('1.1.1.1',53),timeout=5)"]
-    out = sandbox.run("python:3.12-slim", probe, tmp_path, timeout=30)
+    out = sandbox.run(IMAGE, probe, tmp_path, timeout=30)
     assert out.exit_code != 0, "the sandbox reached the network"
 
 
 @needs_docker
 def test_a_hung_step_is_stopped_by_the_clock(tmp_path):
     """The fourth stop condition: a step limit bounds breadth, not duration."""
-    out = sandbox.run("python:3.12-slim", ["sleep", "60"], tmp_path, timeout=5)
+    out = sandbox.run(IMAGE, ["sleep", "60"], tmp_path, timeout=5)
     assert out.stopped_because == "timeout"
     assert out.seconds < 20

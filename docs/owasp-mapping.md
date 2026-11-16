@@ -4,15 +4,17 @@ Source: *OWASP Top 10 for Agentic Applications 2026*, OWASP GenAI Security Proje
 Security Initiative, version 2026, December 2025. Licensed CC BY-SA 4.0. The ten titles below are
 quoted as OWASP writes them; everything else is mine.
 
-Four are addressed, four are partial, two are not addressed at all. The last two are the useful
-rows: a mapping that claimed ten out of ten would be describing a different platform.
+Four are addressed, five are partial, and one does not apply yet. ASI04 moved from not addressed
+to partial on 2026-11-16, when the supply chain was pinned by content; what keeps it short of
+addressed is written in its own row rather than rounded up. The partial rows are the useful ones:
+a mapping that claimed ten out of ten would be describing a different platform.
 
 | | Risk | Status |
 |---|---|---|
 | ASI01 | Agent Goal Hijack | partial |
 | ASI02 | Tool Misuse and Exploitation | addressed |
 | ASI03 | Identity and Privilege Abuse | addressed |
-| ASI04 | Agentic Supply Chain Vulnerabilities | **not addressed** |
+| ASI04 | Agentic Supply Chain Vulnerabilities | partial |
 | ASI05 | Unexpected Code Execution (RCE) | addressed |
 | ASI06 | Memory & Context Poisoning | addressed by absence |
 | ASI07 | Insecure Inter-Agent Communication | **not applicable yet** |
@@ -49,11 +51,20 @@ no network, so the instance metadata endpoint is unreachable and there are no cr
 collect. The golden path narrows but never widens: an agent cannot grant itself a gated or
 forbidden action at provisioning time, so there is no privilege route through onboarding either.
 
-## ASI04 · Agentic Supply Chain Vulnerabilities — not addressed
+## ASI04 · Agentic Supply Chain Vulnerabilities — partial
 
-The base image is pinned by tag, which is not the same as pinned by digest, and nothing verifies
-what is in it. There is no SBOM, no signature verification, and no policy on which model versions
-may be used. This is the largest open risk on the list and it is Module 4 work.
+Three things that used to arrive on trust are now fixed by content. The sandbox image is pinned
+by digest and the runtime refuses to start on anything that is not one. The policy engine is
+pinned to a version and verified against a published checksum, where it used to be fetched from a
+`latest` URL unchecked, which made the whole guardrail layer whatever that download happened to
+be. The build's actions are pinned by commit. The digest of the image a step ran on is written
+into the audit record, inside the hash, so it cannot be adjusted afterwards. CI emits a CycloneDX
+SBOM of the image that ran and keeps it with the build.
+
+It stays partial, and the gap is specific. None of that is a signature: a digest fixes the bytes,
+it does not say who made them. Nothing verifies provenance, and the official base image is not
+signed by a publisher identity this platform could name if it tried. There is still no policy on
+which model versions may be used. See decisions D10.
 
 ## ASI05 · Unexpected Code Execution (RCE) — addressed
 

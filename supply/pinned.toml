@@ -1,0 +1,42 @@
+# What this platform trusts, named by content rather than by label.
+#
+# Every entry here was resolved once, by hand, and written down with the command that produced
+# it. That matters more than the values: a pin nobody can re-derive is a number somebody will
+# eventually bump without checking, which is the habit pinning exists to break.
+#
+# None of this is a signature. A digest says the bytes did not change since I looked; it does not
+# say who made them or that they are safe. See docs/decisions.md D10 for where that line sits.
+
+[sandbox_image]
+# The image every sandbox runs. A tag is a label the publisher can move, so it says who published
+# the image and not what is in it. The digest is the image.
+#
+#   TOKEN=$(curl -s "https://auth.docker.io/token?service=registry.docker.io\
+#     &scope=repository:library/python:pull" | jq -r .token)
+#   curl -sI -H "Authorization: Bearer $TOKEN" \
+#     -H "Accept: application/vnd.oci.image.index.v1+json" \
+#     https://registry-1.docker.io/v2/library/python/manifests/3.12-slim \
+#     | grep -i docker-content-digest
+#
+# This is the multi-architecture index digest, so `docker run python@sha256:...` still resolves
+# to the right build per platform. Re-running that command is how you check this is current.
+repository = "python"
+was_tagged = "3.12-slim"
+digest = "sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b"
+pinned_on = "2026-11-16"
+
+[opa]
+# The policy engine the build installs and then trusts to say what agents may do. It used to be
+# fetched from a "latest" URL with no verification at all, which made it the softest thing in
+# the supply chain: swap that download and every guardrail decision afterwards is whatever the
+# attacker wants, with a green build on top.
+#
+#   curl -sL https://github.com/open-policy-agent/opa/releases/download/v1.22.4/\
+#     opa_linux_amd64_static.sha256
+#
+# The checksum is published by the same project as the binary, so this detects a corrupted or
+# substituted download, not a compromised OPA release. That distinction is the point of D10.
+version = "v1.22.4"
+asset = "opa_linux_amd64_static"
+sha256 = "35e3b352e715e80624ead6c89930d8585f6f7d94cdc409eb2a9fe36620dcccba"
+pinned_on = "2026-11-16"
