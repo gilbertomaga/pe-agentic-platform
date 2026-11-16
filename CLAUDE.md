@@ -49,4 +49,7 @@ Agent runtime, policy layer, audit trail and golden path. Python, Docker, OPA.
   counts downloads against checks across all workflows. See D10 and D13.
 - A scanner's raw output stays on the runner. Only derived counts, rule names and paths reach
   the evidence directory, because a secret scanner's findings are the secrets. See D13.
+- A finding is carried by naming it in `assurance/exceptions.toml`, with a reason, a person and
+  an expiry. Never by relaxing a control or a threshold. The state is `excepted`, never `held`,
+  and a committed secret can never be excepted. See D14.
 - Nothing in here may modify `policy/`.

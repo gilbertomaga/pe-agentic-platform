@@ -527,3 +527,63 @@ libraries, not a service. There is no dependency scan, because there are no thir
 dependencies to scan: that is a property of this codebase rather than a control this platform
 provides, and claiming the control would be claiming credit for the absence of the risk. Signing
 and provenance remain where D10 left them.
+
+
+## D14 · The gate fired, so there is a register
+
+**2026-11-16 · security, assurance**
+
+The image scan from D13 blocked the build on its first run. Two HIGH findings, both against the
+same package, zlib1g, in the Debian base of the pinned sandbox image, with a fixed Debian version
+published and no rebuilt official Python image carrying it. Forty seven more findings at the same
+severity had no fix available at all.
+
+So the control was correct, the finding was real, and there was no version to move to. Three ways
+out of that and two of them are the same mistake.
+
+Turning the control off removes the only thing that found it. Lowering the threshold removes it
+along with every other finding at that severity, which is the same act with more steps and a
+better name. Both end with a platform that has an image scanner and does not know what is in its
+image, which is where it started, except now there is a green tick.
+
+**So the finding is written down.** `assurance/exceptions.toml` names the two identifiers, the
+package, the reason, the person who decided and the date it stops counting. The control is
+untouched. Four properties keep this from becoming the thing it replaced.
+
+It is per finding, never per control. An exception lists the identifiers it covers, so a new
+vulnerability in the same image blocks the build on the day it appears, because nobody has looked
+at it yet. A control level exception would be the gate switched off with ceremony.
+
+It expires. Carrying a finding is a decision about today and not a permanent property of it. An
+expired exception stops applying and the control blocks again, which is the only mechanism I know
+of that reliably brings somebody back to a decision they made in a hurry. This one runs to
+2026-12-14.
+
+It is never a pass. The control reads `excepted`, not `held`, in every bundle filed in the
+evidence store, and the bundle carries the identifiers, the reason and the name. An auditor
+reading a year of bundles can see how long something was carried and who said so without asking
+anybody. An exception that reads as a pass is precisely how an exception becomes permanent.
+
+It names a person. Not a team and not a ticket on its own.
+
+**The reason is the part worth reviewing**, and what makes this one defensible is not the
+severity, it is the containment. Reaching a zlib flaw needs the container to be handed attacker
+chosen compressed input, and the only thing that enters this sandbox is a plan the platform
+wrote, with no network, non root, a read only root filesystem and a clock. That argument is in
+the register rather than in somebody's head, which means a reviewer can disagree with it.
+
+**The expiry is pointed at a specific piece of work.** There is no published base image where
+this is clean, so the fix is to build the image instead of consuming one. That is also the point
+at which signing and provenance stop being a declared gap, which D10 said and this date now
+forces.
+
+**A correction to D11, which claimed the bundle carries no clock.** It carries a date now,
+`assessed_on`, because attestations and exceptions expire and the day they were weighed against
+is an input to the result rather than a fact about the filing. Leaving it out made the bundle
+quietly non reproducible across a boundary; putting it in makes the judgment re-derivable by
+somebody reading the bundle alone. It is the same distinction that put the storage time in the
+receipt and not in the bundle, applied in the other direction.
+
+**One thing deliberately cannot be excepted.** A committed secret produces no finding
+identifiers, so there is nothing for an exception to match on and the control blocks until the
+scan is clean. A leaked credential is rotated, not carried for a month.

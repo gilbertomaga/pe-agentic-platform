@@ -40,7 +40,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from assurance import catalog as catalog_module
-from assurance import collect
+from assurance import collect, exceptions
 from trail import trail
 
 #: The shape the Product Builder, Outcome Lead and FDE bundles consume. Changing it is a contract
@@ -114,7 +114,8 @@ def _attested(control, root: Path, today: date) -> tuple[bool | None, str]:
     return True, f"accepted by {who} on {on.isoformat()}, valid to {expires.isoformat()}"
 
 
-def assess(control, facts: dict[str, collect.Fact], root: Path, today: date) -> dict:
+def assess(control, facts: dict[str, collect.Fact], root: Path, today: date,
+           register: tuple = ()) -> dict:
     """One control, its evidence, and whether it held. The mapping an auditor reads."""
     if control.gap:
         held, detail, state = None, control.gap, "declared_gap"
@@ -124,6 +125,16 @@ def assess(control, facts: dict[str, collect.Fact], root: Path, today: date) -> 
     else:
         fact = facts[control.fact]
         held, detail, state = fact.held, fact.detail, fact.state
+
+        # A finding somebody looked at and decided to carry reads `excepted`, never `held`,
+        # and only while every one of them is named by a live exception. See D14.
+        if held is False and fact.findings:
+            covered, note = exceptions.apply(control.id, fact.findings, register, today)
+            if covered:
+                state = "excepted"
+                detail = f"{detail}. {note}"
+            elif note:
+                detail = f"{detail}. {note}"
 
     return {
         "control": control.id,
@@ -152,10 +163,12 @@ def assemble(
     """
     today = today or datetime.now().date()
     catalog = catalog_module.load(catalog_path)
+    register = exceptions.load(catalog_path.parent / exceptions.DEFAULT_REGISTER.name)
     facts = collect.facts(run_id, evidence_dir, trail_path)
     records = trail.find(run_id, trail_path)
 
-    assessed = [assess(c, facts, catalog_path.parent, today) for c in catalog.controls]
+    assessed = [assess(c, facts, catalog_path.parent, today, register)
+                for c in catalog.controls]
     anchor_path = trail.head_path(trail_path)
     anchor = (json.loads(anchor_path.read_text(encoding="utf-8"))
               if anchor_path.exists() else None)
@@ -181,6 +194,15 @@ def assemble(
             "catalog": {"version": catalog.version,
                         "framework": catalog.framework,
                         "source": catalog.source},
+            # An input to the judgment rather than a fact about the filing, which is why it is
+            # here and `assembled_at` is not: attestations and exceptions expire, so the date
+            # they were weighed against is part of the result and has to be re-derivable.
+            "assessed_on": today.isoformat(),
+            "exceptions": [
+                {"control": c.control, "findings": list(c.findings), "reason": c.reason.strip(),
+                 "raised_by": c.raised_by, "raised_on": c.raised_on.isoformat(),
+                 "expires": c.expires.isoformat(), "live": c.live(today)}
+                for c in register],
             "assessed": assessed,
             "summary": _summary(assessed),
         },
@@ -196,9 +218,15 @@ def _summary(assessed: list[dict]) -> dict:
             "blocking_failures": len(_failures(assessed))}
 
 
+#: States a blocking control may be in without stopping the change. `excepted` is here because
+#: somebody looked at the findings and wrote down why they are being carried and until when; it
+#: is not here because it is a pass, and the bundle says `excepted` rather than `held` every
+#: time so the record shows how long it went on.
+PASSABLE = ("held", "attested", "excepted")
+
+
 def _failures(assessed: list[dict]) -> list[dict]:
-    return [e for e in assessed
-            if e["blocking"] and e["state"] not in ("held", "attested")]
+    return [e for e in assessed if e["blocking"] and e["state"] not in PASSABLE]
 
 
 def blocking_failures(bundle: dict) -> list[str]:

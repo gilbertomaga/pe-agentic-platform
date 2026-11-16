@@ -35,8 +35,16 @@ and the control catalog reads the evidence, so the severity that stops a build i
 in a control rather than a flag in a YAML argument. The image gate blocks on findings with a fix
 available and counts the ones without, because a build cannot act on a vulnerability with no
 patch. Both scanners are pinned by checksum for the same reason the policy engine is: a scanner
-that did not run reports nothing, and nothing is what a clean result looks like. The raw reports
-never leave the runner, because a secret scanner's findings are the secrets.
+that did not run reports nothing, and nothing is what a clean result looks like. The secret
+scanner's report never leaves the runner, because its findings are the secrets.
+
+**An exception register, because the gate fired.** The image scan blocked on its first run
+against a real vulnerability with no fixed base image to move to. Rather than switch the control
+off or lower the bar, the two findings are written down by identifier in
+`assurance/exceptions.toml` with the reason, a named person and a date they stop counting. The
+control then reads `excepted`, never `held`, in every bundle that is filed, so how long something
+was carried and who said so is in the record. A new finding on the same control still blocks,
+because an exception names findings rather than controls.
 
 **An assurance bundle the build hands over.** Every run assembles one: the traceability projected
 into a shape other consumers can read, the test and supply chain evidence the pipeline produced,

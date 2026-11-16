@@ -23,7 +23,7 @@ import pytest
 
 from assurance import bundle as bundle_module
 from assurance import catalog as catalog_module
-from assurance import collect, sink
+from assurance import collect, exceptions, sink
 from trail import trail
 
 REPO = Path(__file__).resolve().parent.parent
@@ -395,6 +395,143 @@ def test_the_bill_of_materials_is_read_from_the_file_the_build_produced(tmp_path
     assert written["components"] == 2
     assert written["format"] == "CycloneDX-json"
     assert len(written["sha256"]) == 64
+
+
+# ---------------------------------------------------- carrying a finding on purpose
+
+@pytest.fixture
+def security_catalog(tmp_path):
+    """One control, backed by the image scan, so the exception paths are reachable."""
+    path = tmp_path / "controls.toml"
+    path.write_text(
+        'version = "test-1"\nframework = "test"\nsource = "written for this test"\n'
+        '[[control]]\nid = "T-SE"\nstatement = "Image is clean."\n'
+        'fact = "security.image_free_of_fixable_vulnerabilities"\nblocking = true\n',
+        encoding="utf-8")
+    return path
+
+
+def two_findings(evidence_dir):
+    (evidence_dir / "security.json").write_text(json.dumps(
+        {"image_vulnerabilities": {"scanner": "trivy", "target": "img", "total": 9,
+                                   "fixable": 2, "unfixable": 7,
+                                   "fixable_ids": ["CVE-1", "CVE-2"]}}), encoding="utf-8")
+
+
+def register(tmp_path, findings, expires, control="T-SE"):
+    path = tmp_path / "exceptions.toml"
+    path.write_text(
+        "[[exception]]\n"
+        f'control = "{control}"\n'
+        f"findings = {json.dumps(findings)}\n"
+        'reason = "bounded by the sandbox; no fixed base image published"\n'
+        'raised_by = "A Person"\nraised_on = "2026-11-16"\n'
+        f'expires = "{expires}"\n', encoding="utf-8")
+    return path
+
+
+def state_of(built, control):
+    return next(e["state"] for e in built["controls"]["assessed"] if e["control"] == control)
+
+
+def test_a_live_exception_covering_every_finding_stops_it_blocking(
+        evidence, trail_path, security_catalog, tmp_path):
+    two_findings(evidence)
+    register(tmp_path, ["CVE-1", "CVE-2"], "2026-12-14")
+    built = build(evidence, trail_path, security_catalog)
+
+    assert state_of(built, "T-SE") == "excepted"
+    assert bundle_module.blocking_failures(built) == []
+
+
+def test_an_exception_is_never_recorded_as_a_pass(
+        evidence, trail_path, security_catalog, tmp_path):
+    """A carried finding that reads `held` is how an exception becomes permanent."""
+    two_findings(evidence)
+    register(tmp_path, ["CVE-1", "CVE-2"], "2026-12-14")
+    built = build(evidence, trail_path, security_catalog)
+
+    assert state_of(built, "T-SE") != "held"
+    carried = built["controls"]["exceptions"]
+    assert carried[0]["raised_by"] == "A Person"
+    assert carried[0]["live"] is True
+    assert "A Person" in json.dumps(built["controls"]["assessed"])
+
+
+def test_a_finding_nobody_carried_still_blocks(
+        evidence, trail_path, security_catalog, tmp_path):
+    """Per finding, never per control, or it is the gate switched off with ceremony."""
+    two_findings(evidence)
+    register(tmp_path, ["CVE-1"], "2026-12-14")
+    built = build(evidence, trail_path, security_catalog)
+
+    assert state_of(built, "T-SE") == "not_held"
+    assert any("CVE-2" in f for f in bundle_module.blocking_failures(built))
+
+
+def test_an_expired_exception_stops_applying_and_says_so(
+        evidence, trail_path, security_catalog, tmp_path):
+    two_findings(evidence)
+    register(tmp_path, ["CVE-1", "CVE-2"], "2026-11-20")
+    built = build(evidence, trail_path, security_catalog, today=date(2026, 12, 1))
+
+    assert state_of(built, "T-SE") == "not_held"
+    assert any("expired" in f for f in bundle_module.blocking_failures(built))
+    assert built["controls"]["exceptions"][0]["live"] is False
+
+
+def test_an_exception_for_another_control_does_not_apply(
+        evidence, trail_path, security_catalog, tmp_path):
+    two_findings(evidence)
+    register(tmp_path, ["CVE-1", "CVE-2"], "2026-12-14", control="SOMETHING-ELSE")
+    built = build(evidence, trail_path, security_catalog)
+    assert state_of(built, "T-SE") == "not_held"
+
+
+def test_a_committed_secret_has_nothing_an_exception_can_match(evidence, trail_path):
+    """A leaked credential is rotated, not carried for a month."""
+    (evidence / "security.json").write_text(json.dumps(
+        {"secrets": {"scanner": "gitleaks", "findings": 1,
+                     "rules": ["aws-access-token"], "paths": ["x.sh"]}}), encoding="utf-8")
+    found = collect.facts("run-1", evidence, trail_path)
+    assert found["security.no_committed_secrets"].findings == ()
+
+
+def test_an_incomplete_exception_is_refused(tmp_path):
+    path = tmp_path / "exceptions.toml"
+    path.write_text('[[exception]]\ncontrol = "T"\nfindings = ["CVE-1"]\n', encoding="utf-8")
+    with pytest.raises(exceptions.RegisterError) as refused:
+        exceptions.load(path)
+    assert "reason" in str(refused.value)
+
+
+def test_an_exception_that_expires_before_it_was_raised_is_refused(tmp_path):
+    path = register(tmp_path, ["CVE-1"], "2026-11-01")
+    with pytest.raises(exceptions.RegisterError):
+        exceptions.load(path)
+
+
+def test_no_register_is_empty_but_an_unreadable_one_is_a_stop(tmp_path):
+    assert exceptions.load(tmp_path / "nothing.toml") == ()
+    broken = tmp_path / "exceptions.toml"
+    broken.write_text("[[exception]\n", encoding="utf-8")
+    with pytest.raises(exceptions.RegisterError):
+        exceptions.load(broken)
+
+
+def test_a_control_with_no_named_findings_is_never_excepted():
+    """Nothing to match on means nothing to carry, whatever the register says."""
+    carried = exceptions.load(exceptions.DEFAULT_REGISTER)
+    covered, note = exceptions.apply("DEMO-SE-02", (), carried, date(2026, 11, 16))
+    assert covered is False
+    assert note == ""
+
+
+def test_the_shipped_register_loads_and_every_entry_names_somebody():
+    for carried in exceptions.load():
+        assert carried.raised_by and carried.reason.strip()
+        assert carried.findings
+        assert carried.expires > carried.raised_on
 
 
 def test_the_fact_keys_are_exactly_what_the_catalog_may_name(evidence, trail_path):

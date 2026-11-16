@@ -1,0 +1,28 @@
+# The exception register: findings somebody looked at and decided to carry, with a date they
+# stop counting.
+#
+# This is not a suppression list. An exception names the findings it covers, so a new finding on
+# the same control blocks the build the day it appears. It expires. The control reads `excepted`
+# rather than `held`, in every bundle filed in the evidence store, so how long something was
+# carried and who said so is in the record rather than in somebody's memory.
+#
+# Adding an entry here is a commit, and the reason is the part a reviewer reads.
+# See docs/decisions.md D14.
+
+[[exception]]
+control = "DEMO-SE-02"
+findings = ["CVE-2026-76844", "CVE-2026-85091"]
+reason = """
+Both are the same package, zlib1g, in the Debian base of the pinned sandbox image. Debian has
+published a fixed version and the official Python image has not been rebuilt against it, so
+there is no published base image where this is clean and no amount of re-pinning reaches one.
+The exposure is bounded by what the sandbox already is: no network at all, non root, read only
+root filesystem, a workspace mounted read only, and a wall clock limit. Reaching this through
+zlib needs the container to be fed attacker chosen compressed input, and the only thing that
+enters it is a plan this platform wrote.
+The real fix is to build the image rather than consume one, which is also the point at which
+signing and provenance stop being a declared gap. That is the work this date exists to force.
+"""
+raised_by = "Gilberto Magalhaes"
+raised_on = "2026-11-16"
+expires = "2026-12-14"

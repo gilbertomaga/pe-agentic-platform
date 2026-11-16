@@ -34,6 +34,9 @@ class Fact:
     #: True held, False not held, None not evidenced at all.
     held: bool | None
     detail: str
+    #: The individual findings behind a `not held`, named so that each one can be carried
+    #: deliberately rather than the whole control being waved through. See assurance/exceptions.py.
+    findings: tuple[str, ...] = ()
 
     @property
     def state(self) -> str:
@@ -153,13 +156,17 @@ def _security(evidence: dict | None) -> dict[str, Fact]:
             f"{secrets.get('scanner', 'scanner')} found nothing in {secrets.get('scanned', '?')}"
             if found == 0 else
             f"{found} findings: {', '.join(secrets.get('rules', [])[:5])}"
-            if found else "the secret scan did not report"),
+            if found else "the secret scan did not report",
+            # Deliberately none. A committed secret is not a thing to carry for a month, it is
+            # a thing to rotate, so there is nothing here for an exception to match on.
+            findings=()),
         "security.image_free_of_fixable_vulnerabilities": Fact(
             fixable == 0 if fixable is not None else None,
             f"{image.get('scanner', 'scanner')} on {image.get('target', '?')}: "
             f"{fixable} fixable at {image.get('severities', 'HIGH,CRITICAL')}, "
             f"{image.get('unfixable', '?')} with no fix available"
-            if fixable is not None else "the image scan did not report"),
+            if fixable is not None else "the image scan did not report",
+            findings=tuple(image.get("fixable_ids") or ())),
     }
 
 
