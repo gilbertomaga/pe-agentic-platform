@@ -9,8 +9,8 @@
 # See quality/gate.py.
 
 recorded_on = "2026-11-16"
-recorded_from = "local run, 4 tests skipped for want of a Docker daemon, so this bar is loose; CI reports where"
-total = 280
+recorded_from = "GitHub Actions run 43868388874, complete suite, 96 passed 0 skipped"
+total = 267
 
 [files]
 "assurance/__init__.py" = 1
@@ -30,7 +30,7 @@ total = 280
 "runtime/__main__.py" = 59
 "runtime/alert.py" = 1
 "runtime/runner.py" = 3
-"runtime/sandbox.py" = 17
+"runtime/sandbox.py" = 4
 "supply/__init__.py" = 1
 "supply/verify.py" = 4
 "trail/__init__.py" = 0
