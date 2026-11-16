@@ -9,14 +9,15 @@
 # See quality/gate.py.
 
 recorded_on = "2026-11-16"
-recorded_from = "GitHub Actions run 43868388874, complete suite, 96 passed 0 skipped"
-total = 267
+recorded_from = "GitHub Actions run 43903881448, complete suite, 0 skipped"
+total = 198
 
 [files]
 "assurance/__init__.py" = 1
 "assurance/bundle.py" = 30
 "assurance/catalog.py" = 6
-"assurance/collect.py" = 41
+"assurance/collect.py" = 4
+"assurance/exceptions.py" = 0
 "assurance/land.py" = 33
 "assurance/sink.py" = 5
 "golden_path/__init__.py" = 1
@@ -27,12 +28,12 @@ total = 267
 "quality/coverage.py" = 4
 "quality/gate.py" = 18
 "runtime/__init__.py" = 1
-"runtime/__main__.py" = 59
+"runtime/__main__.py" = 28
 "runtime/alert.py" = 1
 "runtime/runner.py" = 3
 "runtime/sandbox.py" = 4
 "supply/__init__.py" = 1
-"supply/verify.py" = 4
+"supply/verify.py" = 3
 "trail/__init__.py" = 0
 "trail/gate.py" = 4
 "trail/trail.py" = 1
