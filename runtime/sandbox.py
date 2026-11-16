@@ -37,6 +37,10 @@ class Result:
     stdout: str
     stderr: str
     seconds: float
+    #: The invocation that produced all of the above. It travels with the result because the
+    #: machine a failure happened on is usually not the machine somebody is reading it on, and
+    #: "exit code 127" without the command that returned it is a number and not a report.
+    argv: tuple[str, ...] = ()
 
 
 def docker_argv(
@@ -124,9 +128,11 @@ def run(
             stdout=_text(expired.stdout),
             stderr=_text(expired.stderr),
             seconds=time.monotonic() - started,
+            argv=tuple(argv),
         )
     except OSError as err:
-        return Result(run_id, "error", None, "", str(err), time.monotonic() - started)
+        return Result(run_id, "error", None, "", str(err), time.monotonic() - started,
+                      argv=tuple(argv))
 
     return Result(
         run_id=run_id,
@@ -135,6 +141,7 @@ def run(
         stdout=proc.stdout,
         stderr=proc.stderr,
         seconds=time.monotonic() - started,
+        argv=tuple(argv),
     )
 
 

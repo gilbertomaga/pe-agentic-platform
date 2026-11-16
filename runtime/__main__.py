@@ -107,6 +107,19 @@ def main(argv: list[str] | None = None) -> int:
         if not step.executed:
             print(f"     {step.reason}")
 
+            # Everything the container said, and the invocation that produced it. The trail
+            # keeps a summary because it has to stay readable years later; the person standing
+            # in front of the failure needs the raw thing. Until a cold run on somebody else's
+            # machine returned a code and nothing else, this printed the summary and stopped,
+            # which left them with a number and me with no way to help from here.
+            if step.result is not None:
+                for stream, text in (("stderr", step.result.stderr),
+                                     ("stdout", step.result.stdout)):
+                    for line in (text or "").strip().splitlines():
+                        print(f"     {stream} | {line}")
+                if step.result.argv:
+                    print("     ran | " + " ".join(step.result.argv))
+
     print(f"\n{run.stopped_because}, {len(run.executed)} of {len(actions)} actions executed")
     return 0 if run.stopped_because == "completed" else 1
 

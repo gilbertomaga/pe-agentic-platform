@@ -136,3 +136,26 @@ def test_the_plan_is_not_run_when_the_sandbox_cannot_be_reached(monkeypatch, tmp
     out = capsys.readouterr().out
     assert sandbox.NO_DAEMON in out
     assert "Nothing was decided or recorded" in out
+
+
+def test_a_failed_step_prints_what_the_container_said_and_what_was_run(
+        monkeypatch, tmp_path, capsys):
+    """A number with no command behind it is not a report, and the machine a failure happened
+    on is usually not the machine somebody is reading it on."""
+    from runtime import runner
+
+    result = sandbox.Result("r1", "completed", 127, "", "the real reason", 0.3,
+                            argv=("docker", "run", "--rm", "img", "ls"))
+    run = runner.Run("r1", (runner.Step(1, "read:repository", "allow", "exit code 127",
+                                        executed=False, result=result),), "failed")
+
+    workspace = new_agent.provision("probe", root=tmp_path)
+    monkeypatch.setattr(sandbox, "availability", lambda: (True, ""))
+    monkeypatch.setattr(entrypoint, "scope_of", lambda agent, **kw: ["read:repository"])
+    monkeypatch.setattr(entrypoint.runner, "execute", lambda *a, **k: run)
+
+    entrypoint.main([str(workspace / "plan.toml")])
+    out = capsys.readouterr().out
+
+    assert "stderr | the real reason" in out
+    assert "ran | docker run --rm img ls" in out
