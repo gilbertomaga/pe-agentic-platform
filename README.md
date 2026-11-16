@@ -83,16 +83,60 @@ An action the agent never declared, or one the policy forbids, is blocked, recor
 alerted on stderr and to `PLATFORM_ALERT_FILE`. A gated action waiting for its approver is not
 alerted: that is the gate working, and paging someone for it is how a channel becomes noise.
 
-## Running it
+## What you need
 
-    python -m pytest -q
-    opa test policy/ -v
+**Python 3.11 or newer.** The platform reads its own configuration with `tomllib`, which arrived
+in 3.11. On anything older it says so and stops, rather than failing somewhere confusing later.
+
+**OPA on your PATH.** Every decision about what an agent may do is made by it, so the platform
+refuses to start without it rather than falling back to a permissive answer. Install it from
+[openpolicyagent.org](https://www.openpolicyagent.org/docs/latest/#running-opa), or point
+`OPA_BIN` at the binary. Check with `opa version`.
+
+**Docker, only to actually run an agent.** Provisioning, the policy, the gates and the audit trail
+all work without it. Without a daemon the four containment tests skip, and the platform tells you
+which ones rather than quietly counting them as passed.
+
+**pytest, only to run the suite.** `python -m pip install pytest`.
+
+## Standing up an agent
+
+Three commands. The first two are the product; the third is how you check it told you the truth.
+
     python -m golden_path.new_agent my-agent
+
+Creates the agent's folder and walks it through the gates: the config parses, the actions it asked
+for are within policy, the sandbox image is pinned by digest. It prints the digest, so you can see
+the bytes your agent will run on rather than being told they are fine. A failing gate stops here.
+
     python -m runtime golden_path/agents/my-agent/plan.toml
-    python -m golden_path.adoption
+
+Runs the plan the path just wrote for you. One action, in a container with no network at all, on a
+read only copy of the agent's own folder, destroyed when it finishes.
+
     python -m trail.gate
+
+Checks the record of what just happened: the chain is intact, nothing executed without a decision
+recorded first, and no gated action went ahead without a named approver.
+
+To watch it refuse something, open `golden_path/agents/my-agent/plan.toml` and uncomment the
+`deploy:production` block at the bottom, then run the second command again. The agent never
+declared that action, so it is refused before it reaches a container, and the refusal is recorded
+and alerted. Declare it in `agent.toml` instead and it is still refused, now for a different
+reason: it is gated, and a gated action needs a named approver who is not the person who asked.
+
+## The platform's own gates
+
+These are what CI runs against every change. They are platform operations rather than part of
+standing up an agent.
+
+    python -m pytest -q                                   the suite
+    opa test policy/ -v                                   the guardrail and compliance policies
+    python -m golden_path.adoption                        who came through the path, and who did not
+
     python -m pytest -q --cov --cov-report=xml:coverage.xml --junitxml=junit.xml
     python -m quality.gate --report coverage.xml --tests junit.xml
+
     python -m assurance.collect supply --out evidence/supply.json
     python -m assurance.bundle <run-id> --evidence evidence --out bundles
     python -m assurance.land bundles/<bundle>.json --directory ./filed
@@ -106,9 +150,9 @@ change it just checked and hands it to an S3 compatible store, which exercises t
 unlocked bucket as well as the write, so the path to a client's evidence store is run rather than
 described.
 
-Run the bundler locally and it will tell you the truth about the machine you are on: with Docker
-unavailable the containment control reads not held, because the sandbox tests skipped and a suite
-that skipped them proves nothing about containment.
+Run the bundler on your own machine and it will tell you the truth about that machine rather than
+about the platform: with Docker unavailable the containment control reads not held, because the
+sandbox tests skipped and a suite that skipped them proves nothing about containment.
 
 ## Reading it
 

@@ -8,16 +8,24 @@
 #     python -m runtime golden_path/agents/{{NAME}}/plan.toml
 
 agent  = "{{NAME}}"
-prompt = "run the tests and report back"
+prompt = "look at what you have been given and report back"
 
 # Who is asking. Needed before any gated action runs, because the control is that the
 # approver is not the requester, and that cannot be checked against a blank.
 # requested_by = "a.name"
 
+# The first action does something small that works everywhere, because the point of the first
+# run is to see the boundary rather than to do work. It lists the workspace from inside the
+# container: that directory is this agent's own folder, mounted read only, and there is no
+# network at all in there.
+#
+# It used to run pytest. The sandbox image is a bare Python and has no pytest in it, and no
+# network to go and get one, so the very first thing a newcomer ran could only ever fail. A
+# default that cannot succeed reads as a broken platform rather than as a wrong plan.
 [[actions]]
-verb    = "run"
-target  = "tests"
-command = ["python", "-m", "pytest", "-q"]
+verb    = "read"
+target  = "repository"
+command = ["ls", "-la", "/workspace"]
 
 # Uncomment to watch the platform refuse something this agent never declared.
 #
