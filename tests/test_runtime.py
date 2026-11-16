@@ -373,3 +373,30 @@ def test_an_autonomous_action_needs_no_requester(path, no_container, tmp_path):
     """The control is about the human in the loop. Where there is none, there is nothing to ask."""
     run = runner.execute("read it", [READ], scope=SCOPE, workspace=tmp_path, trail_path=path)
     assert run.stopped_because == "completed"
+
+
+# ------------------------------------ the record named the wrong line, which a cold run found
+def test_the_record_keeps_the_line_that_says_what_happened(path, no_container, tmp_path):
+    """A cold run came back with `exit code 127: Run 'docker run --help' for more information`.
+
+    That is the container runtime's own footer, it arrives last, and taking the last line of
+    stderr threw away the sentence above it that named the cause. A record that names the wrong
+    line is worse than one that says nothing, because somebody investigates the wrong thing.
+    """
+    stderr = ("docker: Error response from daemon: failed to create task for container: "
+              'exec: "ls": executable file not found in $PATH\n'
+              "Run 'docker run --help' for more information")
+    said = runner._why_not(runner.sandbox.Result(
+        "r1", "completed", 127, "", stderr, 0.4))
+
+    assert "executable file not found" in said
+    assert "--help" not in said
+    assert "exit code 127" in said
+
+
+def test_a_failure_with_only_boilerplate_still_says_something(path):
+    """Dropping every line would trade a misleading record for an empty one."""
+    said = runner._why_not(runner.sandbox.Result(
+        "r1", "completed", 125, "", "Run 'docker run --help' for more information", 0.1))
+    assert "exit code 125" in said
+    assert "--help" in said, "with nothing else to report, the boilerplate is all there is"

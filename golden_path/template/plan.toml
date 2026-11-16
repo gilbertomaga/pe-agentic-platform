@@ -22,10 +22,14 @@ prompt = "look at what you have been given and report back"
 # It used to run pytest. The sandbox image is a bare Python and has no pytest in it, and no
 # network to go and get one, so the very first thing a newcomer ran could only ever fail. A
 # default that cannot succeed reads as a broken platform rather than as a wrong plan.
+#
+# It then used `ls`, and a cold run on somebody else's machine came back with exit code 127.
+# The image is named after Python, so the one thing it is safe to assume is Python. Anything
+# else is a guess about a base image that can change under a digest bump.
 [[actions]]
 verb    = "read"
 target  = "repository"
-command = ["ls", "-la", "/workspace"]
+command = ["python", "-c", "import os; print('workspace holds:', ', '.join(sorted(os.listdir('/workspace'))))"]
 
 # Uncomment to watch the platform refuse something this agent never declared.
 #

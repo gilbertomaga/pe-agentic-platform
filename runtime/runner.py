@@ -92,18 +92,38 @@ class Run:
         return tuple(s for s in self.steps if s.executed)
 
 
+#: Lines the container runtime adds to its own errors, which say nothing about what went wrong.
+#: They arrive last, which is the problem: taking the last line of stderr returned one of these
+#: and discarded the sentence above it that named the actual cause. A cold run reported
+#: "exit code 127: Run 'docker run --help' for more information", and that is all anybody got.
+BOILERPLATE = ("run --help", "--help' for more information", "see 'docker")
+
+
+def _meaningful(stderr: str, keep: int = 3) -> list[str]:
+    """The lines worth putting in the record, oldest first, boilerplate dropped."""
+    lines = [line.strip() for line in stderr.strip().splitlines() if line.strip()]
+    said = [line for line in lines
+            if not any(noise in line.lower() for noise in BOILERPLATE)]
+    return (said or lines)[:keep]
+
+
 def _why_not(result: sandbox.Result) -> str:
     """What goes in the trail when a step did not succeed.
 
     "sandbox error" on its own sends whoever reads this back to the machine it ran on, which by
     then is gone. The reason the container never started belongs in the record.
+
+    It keeps several lines rather than one. The useful sentence is rarely the last thing the
+    runtime printed, and a record that names the wrong line is worse than one that says nothing,
+    because somebody then goes and investigates the wrong thing.
     """
     if result.stopped_because == "timeout":
         return "stopped by the wall clock before it finished"
     if result.stopped_because == "error":
         return f"the container never started: {result.stderr.strip() or 'no detail'}"
-    tail = result.stderr.strip().splitlines()
-    return f"exit code {result.exit_code}" + (f": {tail[-1]}" if tail else "")
+
+    said = _meaningful(result.stderr)
+    return f"exit code {result.exit_code}" + (": " + " / ".join(said) if said else "")
 
 
 def execute(
