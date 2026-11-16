@@ -152,6 +152,15 @@ jobs:
       - name: Walk the golden path, which writes a trail
         run: python -m golden_path.new_agent ci-probe
 
+      # The two commands the README puts in front of somebody arriving, run in that order
+      # against the plan the path actually writes. This was never here, which is why the first
+      # person to follow the README found three things in an afternoon that the build had been
+      # green through for weeks: it tested the parts and never the arrival.
+      - name: Arrive at this repository the way a newcomer does
+        run: |
+          python -m golden_path.new_agent ci-newcomer
+          python -m runtime golden_path/agents/ci-newcomer/plan.toml
+
       - name: Audit gate
         run: python -m trail.gate
 
