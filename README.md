@@ -112,7 +112,8 @@ the bytes your agent will run on rather than being told they are fine. A failing
     python -m runtime golden_path/agents/my-agent/plan.toml
 
 Runs the plan the path just wrote for you. One action, in a container with no network at all, on a
-read only copy of the agent's own folder, destroyed when it finishes.
+read only copy of the agent's own folder, destroyed when it finishes. This is the one command that
+needs Docker actually running and not merely installed, and it says which of the two is missing.
 
     python -m trail.gate
 

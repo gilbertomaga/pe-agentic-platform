@@ -74,12 +74,30 @@ def docker_argv(
     ]
 
 
+#: Why the sandbox cannot be reached, in the words somebody would act on. The two states were
+#: one boolean until a cold run found that they are not the same problem: the first person to
+#: follow the README had the docker command installed, read "start Docker", typed `docker`, saw
+#: it print its usage, and stopped. The command being there says nothing about the daemon
+#: answering, and the message has to say which of the two is wrong.
+NO_DOCKER = ("docker is not on PATH. Every action here runs in a container, so there is nothing "
+             "to run without it.")
+NO_DAEMON = ("the docker command is here but no daemon is answering it, which usually means "
+             "Docker Desktop is installed and not running. Start it and try again.")
+
+
+def availability() -> tuple[bool, str]:
+    """Whether the sandbox can be reached, and if not, which of the two reasons it is."""
+    if shutil.which("docker") is None:
+        return False, NO_DOCKER
+    probe = subprocess.run(["docker", "info"], capture_output=True, text=True)
+    if probe.returncode != 0:
+        return False, NO_DAEMON
+    return True, ""
+
+
 def available() -> bool:
     """Is a Docker daemon reachable?"""
-    if shutil.which("docker") is None:
-        return False
-    probe = subprocess.run(["docker", "info"], capture_output=True, text=True)
-    return probe.returncode == 0
+    return availability()[0]
 
 
 def run(

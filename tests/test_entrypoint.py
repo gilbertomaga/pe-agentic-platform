@@ -12,12 +12,14 @@ runnable at all.
 from __future__ import annotations
 
 import os
+import subprocess
 
 import pytest
 
 from golden_path import new_agent
 from policy import evaluate
 from runtime import __main__ as entrypoint
+from runtime import sandbox
 
 _has_opa = evaluate.available()
 if os.environ.get("REQUIRE_OPA") == "1" and not _has_opa:
@@ -99,3 +101,38 @@ def test_the_shipped_plan_runs_a_command_the_sandbox_image_actually_has(tmp_path
             assert tool not in command.split(), (
                 f"the shipped plan runs `{command}`, and {tool} is not in the sandbox image "
                 "and cannot be fetched from inside it")
+
+
+# ------------------------------------------- what a cold run found, on somebody else's machine
+
+def test_an_installed_docker_with_no_daemon_says_which_of_the_two_is_wrong(monkeypatch, capsys):
+    """The first person to follow the README read "start Docker", typed `docker`, saw it print
+    its usage, and stopped. The command being on PATH says nothing about the daemon answering."""
+    monkeypatch.setattr(sandbox.shutil, "which", lambda name: "/usr/local/bin/docker")
+    monkeypatch.setattr(sandbox.subprocess, "run",
+                        lambda *a, **k: subprocess.CompletedProcess(a[0], 1, "", "cannot connect"))
+
+    reachable, why = sandbox.availability()
+    assert reachable is False
+    assert why == sandbox.NO_DAEMON
+    assert "not running" in why, "it has to name the thing to go and start"
+
+
+def test_no_docker_at_all_is_a_different_message(monkeypatch):
+    monkeypatch.setattr(sandbox.shutil, "which", lambda name: None)
+    reachable, why = sandbox.availability()
+    assert reachable is False
+    assert why == sandbox.NO_DOCKER
+    assert sandbox.NO_DOCKER != sandbox.NO_DAEMON, "one message for two problems helps neither"
+
+
+def test_the_plan_is_not_run_when_the_sandbox_cannot_be_reached(monkeypatch, tmp_path, capsys):
+    """Nothing decided and nothing recorded, so a stopped machine leaves no trail to explain."""
+    monkeypatch.setattr(sandbox, "availability", lambda: (False, sandbox.NO_DAEMON))
+    workspace = new_agent.provision("probe", root=tmp_path)
+    monkeypatch.setattr(entrypoint, "scope_of", lambda agent, **kw: ["read:repository"])
+
+    assert entrypoint.main([str(workspace / "plan.toml")]) == 2
+    out = capsys.readouterr().out
+    assert sandbox.NO_DAEMON in out
+    assert "Nothing was decided or recorded" in out

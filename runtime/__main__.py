@@ -83,9 +83,9 @@ def main(argv: list[str] | None = None) -> int:
 
     # Say this before anything is decided or recorded. Every action runs in a container, so
     # without a daemon nothing can run, and a trail full of sandbox errors explains that badly.
-    if not sandbox.available():
-        print("no Docker daemon is reachable, and every action runs in a container.\n"
-              "Start Docker and run this again. Nothing was decided or recorded.")
+    reachable, why = sandbox.availability()
+    if not reachable:
+        print(f"{why}\nNothing was decided or recorded.")
         return 2
 
     try:
